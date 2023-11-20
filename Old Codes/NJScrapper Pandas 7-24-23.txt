@@ -1,0 +1,542 @@
+#Create a function to load each individual year in the main_dictionary variable to its own dataframe
+
+main_dictionary = {
+'2018' : {},
+'2019' : {},
+'2020' : {},
+'2021' : {},
+'2022' : {},
+'2023' : {}
+}
+
+#Practice the below functions on this dictionary
+
+monthsyears = {
+'2018' : {'Jan Stuff1' : [1,1,1,1,1], 'Feb Stuff1' : [1,1,1,1,1], 'Mar Stuff1' : [1,1,1,1,1],
+	'Apr Stuff1' : [1,1,1,1,1], 'May Stuff1' : [1,1,1,1,1], 'Jun Stuff1' : [1,1,1,1,1],
+	'Jul Stuff1' : [1,1,1,1,1], 'Aug Stuff1' : [1,1,1,1,1], 'Sep Stuff1' : [1,1,1,1,1],
+	'Oct Stuff1' : [1,1,1,1,1], 'Nov Stuff1' : [1,1,1,1,1], 'Dec Stuff1' : [1,1,1,1,1]},
+'2019' : {'Jan Stuff1' : [1,1,1,1,1], 'Feb Stuff1' : [1,1,1,1,1], 'Mar Stuff1' : [1,1,1,1,1],
+	'Apr Stuff1' : [1,1,1,1,1], 'May Stuff1' : [1,1,1,1,1], 'Jun Stuff1' : [1,1,1,1,1],
+	'Jul Stuff1' : [1,1,1,1,1], 'Aug Stuff1' : [1,1,1,1,1], 'Sep Stuff1' : [1,1,1,1,1],
+	'Oct Stuff1' : [1,1,1,1,1], 'Nov Stuff1' : [1,1,1,1,1], 'Dec Stuff1' : [1,1,1,1,1]}}
+
+
+
+def data2pandas(self, dict):
+	# Make sure to import pandas as pd
+	# Use each key in the main_dictionary to represent the new key in the pandas_dict
+	# I dont know how to create dynamic names so this will have to do
+	pandas_dict = {}
+	for k, v in dict.items():
+		df = pd.DataFrame(v, index = 'City')
+		pandas_dict[k] = df
+	
+	return pandas_dict
+
+def quarterly_yearly(self, dict):
+	#Create new dfs where the full years data is broken up into 4 quarters
+	new_dict = {}
+	for k, v in dict.items():
+		q1_df = v['City', [column for column in v.columns if ['Jan', 'Feb', 'Mar'] and k in column]]
+		q2_df = v['City', [column for column in v.columns if ['Apr', 'May', 'Jun'] and k in column]]
+		q3_df = v['City', [column for column in v.columns if ['Jul', 'Aug', 'Sep'] and k in column]]
+		q1_df = v['City', [column for column in v.columns if ['Oct', 'Nov', 'Dec'] and k in column]]
+		fy_df = v['City', [column for column in v.columns if k in column]]
+		new_dict[k] = [q1_df, q2_df, q3_df, q4_df, fy_df]
+
+	return new_dict
+
+def create_categories(self, dict):
+	#Seperate each dictionary from the quarterly_yearly function into their tracked categories
+	new_dict = {}
+	for k, v in dict.items():
+		new_dict.setdefault(k, {})
+        	new_dict[k].setdefault('Q1', [])
+        	new_dict[k].setdefault('Q2', [])
+        	new_dict[k].setdefault('Q3', [])
+        	new_dict[k].setdefault('Q4', [])
+		for df in v:
+			temp = df.columns.values.tolist()
+			if len(temp) > 3:
+				fy_new_listings = df[[column for column in df.columns if 'New Listings' in column if k in column]]
+				fy_new_listings[‘Mean of FY New Listings’] = fy_new_listings.mean(axis = 1)
+				fy_new_listings[‘Median of FY New Listings’] = fy_new_listings.median(axis = 1)
+				fy_new_listings[‘Std Dev of FY New Listings’] = fy_new_listings.std(axis = 1)
+				fy_new_listings[‘Min of FY New Listings’] = fy_new_listings.min(axis = 1)
+				fy_new_listings[‘Max of FY New Listings’] = fy_new_listings.max(axis = 1)
+				fy_closed_sales = df[[column for column in df.columns if 'Closed Sales' in column if k in column]]
+				fy_closed_sales[‘Mean of FY Closed Sales’] = fy_closed_sales.mean(axis = 1)
+				fy_closed_sales[‘Median of FY Closed Sales’] = fy_closed_sales.median(axis = 1)
+				fy_closed_sales[‘Std Dev of FY Closed Sales’] = fy_closed_sales.std(axis = 1)
+				fy_closed_sales[‘Min of FY Closed Sales’] = fy_closed_sales.min(axis = 1)
+				fy_closed_sales[‘Max of FY Closed Sales’] = fy_closed_sales.max(axis = 1)
+				fy_dom = df[[column for column in df.columns if 'Days on Markets' in column if k in column]]
+				fy_dom[‘Mean of FY Days on Market’] = fy_dom.mean(axis = 1)
+				fy_dom[‘Median of FY Days on Market’] = fy_dom.median(axis = 1)
+				fy_dom[‘Std Dev of FY Days on Market’] = fy_dom.std(axis = 1)
+				fy_dom[‘Min of FY Days on Market’] = fy_dom.min(axis = 1)
+				fy_dom[‘Max of FY Days on Market’] = fy_dom.max(axis = 1)
+				fy_median_sales = df[[column for column in df.columns if 'Median Sales Prices' in column if k in column]]
+				fy_median_sales[‘Mean of FY Median Sales Price’] = fy_median_sales.mean(axis = 1)
+				fy_median_sales[‘Median of FY Median Sales Price’] = fy_median_sales.median(axis = 1)
+				fy_median_sales[‘Std Dev of FY Median Sales Price’] = fy_median_sales.std(axis = 1)
+				fy_median_sales[‘Min of FY Median Sales Price’] = fy_median_sales.min(axis = 1)
+				fy_median_sales[‘Max of FY Median Sales Price’] = fy_median_sales.max(axis = 1)
+				fy_polpr = df[[column for column in df.columns if 'Percent of List Price Received' in column if k in column]]
+				fy_polpr[‘Mean of FY Percent of List Price Received’] = fy_polpr.mean(axis = 1)
+				fy_polpr[‘Median of FY Percent of List Price Received’] = fy_polpr.median(axis = 1)
+				fy_polpr[‘Std Dev of FY Percent of List Price Received’] = fy_polpr.std(axis = 1)
+				fy_polpr[‘Min of FY Percent of List Price Received’] = fy_polpr.min(axis = 1)
+				fy_polpr[‘Max of FY Percent of List Price Received’] = fy_polpr.max(axis = 1)
+				fy_inventory = df['City', [column for column in df.columns if 'Inventory of Homes for Sale' and k in column]]
+				fy_inventory.assign(mean_of_fy_inventory = fy_inventory.mean(axis = 1)
+				fy_inventory.assign(median_of_fy_inventory = fy_inventory.median(axis = 1)
+				fy_inventory.assign(stddev_of_fy_inventory = fy_inventory.std(axis = 1)
+				fy_inventory.assign(min_of_fy_inventory = fy_inventory.min(axis = 1)
+				fy_inventory.assign(max_of_fy_inventory = fy_inventory.max(axis = 1)
+				fy_supply = df['City', [column for column in df.columns if 'Months Supply of Inventory' and k in column]]
+				fy_supply.assign(mean_of_fy_supply = fy_supply.mean(axis = 1)
+				fy_supply.assign(median_of_fy_supply = fy_supply.median(axis = 1)
+				fy_supply.assign(stddev_of_fy_supply = fy_supply.std(axis = 1)
+				fy_supply.assign(min_of_fy_supply = fy_supply.min(axis = 1)
+				fy_supply.assign(max_of_fy_supply = fy_supply.max(axis = 1)
+				new_dict[k]['FY'] = [fy_new_listings, fy_closed_sales, fy_dom, fy_median_sales, fy_polpr, fy_inventory, fy_supply]
+			elif len(temp) > 3:
+				fyq1_new_listings = df['City', [column for column in df.columns if 'New Listings' and k in column]]
+				fyq1_new_listings.assign(mean_of_fyq1_new_listings = fyq1_new_listings.mean(axis = 1)
+				fyq1_new_listings.assign(median_of_fyq1_new_listings = fyq1_new_listings.median(axis = 1)
+				fyq1_new_listings.assign(stddev_of_fyq1_new_listings = fyq1_new_listings.std(axis = 1)
+				fyq1_new_listings.assign(min_of_fyq1_new_listings = fyq1_new_listings.min(axis = 1)
+				fyq1_new_listings.assign(max_of_fyq1_new_listings = fyq1_new_listings.max(axis = 1)
+				fyq1_closed_sales = df['City', [column for column in df.columns if 'Closed Sales' and k in column]]
+				fyq1_closed_sales.assign(mean_of_fyq1_closed_sales = fyq1_closed_sales.mean(axis = 1)
+				fyq1_closed_sales.assign(median_of_fyq1_closed_sales = fyq1_closed_sales.median(axis = 1)
+				fyq1_closed_sales.assign(stddev_of_fyq1_closed_sales = fyq1_closed_sales.std(axis = 1)
+				fyq1_closed_sales.assign(min_of_fyq1_closed_sales = fyq1_closed_sales.min(axis = 1)
+				fyq1_closed_sales.assign(max_of_fyq1_closed_sales = fyq1_closed_sales.max(axis = 1)
+				fyq1_dom = df['City', [column for column in df.columns if 'Days on Market Until Sale' and k in column]]
+				fyq1_dom.assign(mean_of_fyq1_dom = fyq1_dom.mean(axis = 1)
+				fyq1_dom.assign(median_of_fyq1_dom = fyq1_dom.median(axis = 1)
+				fyq1_dom.assign(stddev_of_fyq1_dom = fyq1_dom.std(axis = 1)
+				fyq1_dom.assign(min_of_fyq1_dom = fyq1_dom.min(axis = 1)
+				fyq1_dom.assign(max_of_fyq1_dom = fyq1_dom.max(axis = 1)
+				fyq1_median_sales = df['City', [column for column in df.columns if 'Median Sales Price' and k in column]]
+				fyq1_median_sales.assign(mean_of_fyq1_median_sales = fyq1_median_sales.mean(axis = 1)
+				fyq1_median_sales.assign(median_of_fyq1_median_sales = fyq1_median_sales.median(axis = 1)
+				fyq1_median_sales.assign(stddev_of_fyq1_median_sales = fyq1_median_sales.std(axis = 1)
+				fyq1_median_sales.assign(min_of_fyq1_median_sales = fyq1_median_sales.min(axis = 1)
+				fyq1_median_sales.assign(max_of_fyq1_median_sales = fyq1_median_sales.max(axis = 1)
+				fyq1_polpr = df['City', [column for column in df.columns if 'Percent of List Price Received' and k in column]]
+				fyq1_polpr.assign(mean_of_fyq1_polpr = fyq1_polpr.mean(axis = 1)
+				fyq1_polpr.assign(median_of_fyq1_polpr = fyq1_polpr.median(axis = 1)
+				fyq1_polpr.assign(stddev_of_fyq1_polpr = fyq1_polpr.std(axis = 1)
+				fyq1_polpr.assign(min_of_fyq1_polpr = fyq1_polpr.min(axis = 1)
+				fyq1_polpr.assign(max_of_fyq1_polpr = fyq1_polpr.max(axis = 1)
+				fyq1_inventory = df['City', [column for column in df.columns if 'Inventory of Homes for Sale' and k in column]]
+				fyq1_inventory.assign(mean_of_fyq1_inventory = fyq1_inventory.mean(axis = 1)
+				fyq1_inventory.assign(median_of_fyq1_inventory = fyq1_inventory.median(axis = 1)
+				fyq1_inventory.assign(stddev_of_fyq1_inventory = fyq1_inventory.std(axis = 1)
+				fyq1_inventory.assign(min_of_fyq1_inventory = fyq1_inventory.min(axis = 1)
+				fyq1_inventory.assign(max_of_fyq1_inventory = fyq1_inventory.max(axis = 1)
+				fyq1_supply = df['City', [column for column in df.columns if 'Months Supply of Inventory' and k in column]]
+				fyq1_supply.assign(mean_of_fyq1_supply = fyq1_supply.mean(axis = 1)
+				fyq1_supply.assign(median_of_fyq1_supply = fyq1_supply.median(axis = 1)
+				fyq1_supply.assign(stddev_of_fyq1_supply = fyq1_supply.std(axis = 1)
+				fyq1_supply.assign(min_of_fyq1_supply = fyq1_supply.min(axis = 1)
+				fyq1_supply.assign(max_of_fyq1_supply = fyq1_supply.max(axis = 1)
+				new_dict[k]['Q1'] = [fyq1_new_listings, fyq1_closed_sales, fyq1_dom, fyq1_median_sales, fyq1_polpr, fyq1_inventory, fyq1_supply]
+			elif df == v[1]:
+				fyq2_new_listings = df['City', [column for column in df.columns if 'New Listings' and k in column]]
+				fyq2_new_listings.assign(mean_of_fyq2_new_listings = fyq2_new_listings.mean(axis = 1)
+				fyq2_new_listings.assign(median_of_fyq2_new_listings = fyq2_new_listings.median(axis = 1)
+				fyq2_new_listings.assign(stddev_of_fyq2_new_listings = fyq2_new_listings.std(axis = 1)
+				fyq2_new_listings.assign(min_of_fyq2_new_listings = fyq2_new_listings.min(axis = 1)
+				fyq2_new_listings.assign(max_of_fyq2_new_listings = fyq2_new_listings.max(axis = 1)
+				fyq2_closed_sales = df['City', [column for column in df.columns if 'Closed Sales' and k in column]]
+				fyq2_closed_sales.assign(mean_of_fyq2_closed_sales = fyq2_closed_sales.mean(axis = 1)
+				fyq2_closed_sales.assign(median_of_fyq2_closed_sales = fyq2_closed_sales.median(axis = 1)
+				fyq2_closed_sales.assign(stddev_of_fyq2_closed_sales = fyq2_closed_sales.std(axis = 1)
+				fyq2_closed_sales.assign(min_of_fyq2_closed_sales = fyq2_closed_sales.min(axis = 1)
+				fyq2_closed_sales.assign(max_of_fyq2_closed_sales = fyq2_closed_sales.max(axis = 1)
+				fyq2_dom = df['City', [column for column in df.columns if 'Days on Market Until Sale' and k in column]]
+				fyq2_dom.assign(mean_of_fyq2_dom = fyq2_dom.mean(axis = 1)
+				fyq2_dom.assign(median_of_fyq2_dom = fyq2_dom.median(axis = 1)
+				fyq2_dom.assign(stddev_of_fyq2_dom = fyq2_dom.std(axis = 1)
+				fyq2_dom.assign(min_of_fyq2_dom = fyq2_dom.min(axis = 1)
+				fyq2_dom.assign(max_of_fyq2_dom = fyq2_dom.max(axis = 1)
+				fyq2_median_sales = df['City', [column for column in df.columns if 'Median Sales Price' and k in column]]
+				fyq2_median_sales.assign(mean_of_fyq2_median_sales = fyq2_median_sales.mean(axis = 1)
+				fyq2_median_sales.assign(median_of_fyq2_median_sales = fyq2_median_sales.median(axis = 1)
+				fyq2_median_sales.assign(stddev_of_fyq2_median_sales = fyq2_median_sales.std(axis = 1)
+				fyq2_median_sales.assign(min_of_fyq2_median_sales = fyq2_median_sales.min(axis = 1)
+				fyq2_median_sales.assign(max_of_fyq2_median_sales = fyq2_median_sales.max(axis = 1)
+				fyq2_polpr = df['City', [column for column in df.columns if 'Percent of List Price Received' and k in column]]
+				fyq2_polpr.assign(mean_of_fyq2_polpr = fyq2_polpr.mean(axis = 1)
+				fyq2_polpr.assign(median_of_fyq2_polpr = fyq2_polpr.median(axis = 1)
+				fyq2_polpr.assign(stddev_of_fyq2_polpr = fyq2_polpr.std(axis = 1)
+				fyq2_polpr.assign(min_of_fyq2_polpr = fyq2_polpr.min(axis = 1)
+				fyq2_polpr.assign(max_of_fyq2_polpr = fyq2_polpr.max(axis = 1)
+				fyq2_inventory = df['City', [column for column in df.columns if 'Inventory of Homes for Sale' and k in column]]
+				fyq2_inventory.assign(mean_of_fyq2_inventory = fyq2_inventory.mean(axis = 1)
+				fyq2_inventory.assign(median_of_fyq2_inventory = fyq2_inventory.median(axis = 1)
+				fyq2_inventory.assign(stddev_of_fyq2_inventory = fyq2_inventory.std(axis = 1)
+				fyq2_inventory.assign(min_of_fyq2_inventory = fyq2_inventory.min(axis = 1)
+				fyq2_inventory.assign(max_of_fyq2_inventory = fyq2_inventory.max(axis = 1)
+				fyq2_supply = df['City', [column for column in df.columns if 'Months Supply of Inventory' and k in column]]
+				fyq2_supply.assign(mean_of_fyq2_supply = fyq2_supply.mean(axis = 1)
+				fyq2_supply.assign(median_of_fyq2_supply = fyq2_supply.median(axis = 1)
+				fyq2_supply.assign(stddev_of_fyq2_supply = fyq2_supply.std(axis = 1)
+				fyq2_supply.assign(min_of_fyq2_supply = fyq2_supply.min(axis = 1)
+				fyq2_supply.assign(max_of_fyq2_supply = fyq2_supply.max(axis = 1)
+				new_dict[k]['Q2'] = [fyq2_new_listings, fyq2_closed_sales, fyq2_dom, fyq2_median_sales, fyq2_polpr, fyq2_inventory, fyq2_supply]
+			elif df == v[2]:
+				fyq3_new_listings = df['City', [column for column in df.columns if 'New Listings' and k in column]]
+				fyq3_new_listings.assign(mean_of_fyq3_new_listings = fyq3_new_listings.mean(axis = 1)
+				fyq3_new_listings.assign(median_of_fyq3_new_listings = fyq3_new_listings.median(axis = 1)
+				fyq3_new_listings.assign(stddev_of_fyq3_new_listings = fyq3_new_listings.std(axis = 1)
+				fyq3_new_listings.assign(min_of_fyq3_new_listings = fyq3_new_listings.min(axis = 1)
+				fyq3_new_listings.assign(max_of_fyq3_new_listings = fyq3_new_listings.max(axis = 1)
+				fyq3_closed_sales = df['City', [column for column in df.columns if 'Closed Sales' and k in column]]
+				fyq3_closed_sales.assign(mean_of_fyq3_closed_sales = fyq3_closed_sales.mean(axis = 1)
+				fyq3_closed_sales.assign(median_of_fyq3_closed_sales = fyq3_closed_sales.median(axis = 1)
+				fyq3_closed_sales.assign(stddev_of_fyq3_closed_sales = fyq3_closed_sales.std(axis = 1)
+				fyq3_closed_sales.assign(min_of_fyq3_closed_sales = fyq3_closed_sales.min(axis = 1)
+				fyq3_closed_sales.assign(max_of_fyq3_closed_sales = fyq3_closed_sales.max(axis = 1)
+				fyq3_dom = df['City', [column for column in df.columns if 'Days on Market Until Sale' and k in column]]
+				fyq3_dom.assign(mean_of_fyq3_dom = fyq3_dom.mean(axis = 1)
+				fyq3_dom.assign(median_of_fyq3_dom = fyq3_dom.median(axis = 1)
+				fyq3_dom.assign(stddev_of_fyq3_dom = fyq3_dom.std(axis = 1)
+				fyq3_dom.assign(min_of_fyq3_dom = fyq3_dom.min(axis = 1)
+				fyq3_dom.assign(max_of_fyq3_dom = fyq3_dom.max(axis = 1)
+				fyq3_median_sales = df['City', [column for column in df.columns if 'Median Sales Price' and k in column]]
+				fyq3_median_sales.assign(mean_of_fyq3_median_sales = fyq3_median_sales.mean(axis = 1)
+				fyq3_median_sales.assign(median_of_fyq3_median_sales = fyq3_median_sales.median(axis = 1)
+				fyq3_median_sales.assign(stddev_of_fyq3_median_sales = fyq3_median_sales.std(axis = 1)
+				fyq3_median_sales.assign(min_of_fyq3_median_sales = fyq3_median_sales.min(axis = 1)
+				fyq3_median_sales.assign(max_of_fyq3_median_sales = fyq3_median_sales.max(axis = 1)
+				fyq3_polpr = df['City', [column for column in df.columns if 'Percent of List Price Received' and k in column]]
+				fyq3_polpr.assign(mean_of_fyq3_polpr = fyq3_polpr.mean(axis = 1)
+				fyq3_polpr.assign(median_of_fyq3_polpr = fyq3_polpr.median(axis = 1)
+				fyq3_polpr.assign(stddev_of_fyq3_polpr = fyq3_polpr.std(axis = 1)
+				fyq3_polpr.assign(min_of_fyq3_polpr = fyq3_polpr.min(axis = 1)
+				fyq3_polpr.assign(max_of_fyq3_polpr = fyq3_polpr.max(axis = 1)
+				fyq3_inventory = df['City', [column for column in df.columns if 'Inventory of Homes for Sale' and k in column]]
+				fyq3_inventory.assign(mean_of_fyq3_inventory = fyq3_inventory.mean(axis = 1)
+				fyq3_inventory.assign(median_of_fyq3_inventory = fyq3_inventory.median(axis = 1)
+				fyq3_inventory.assign(stddev_of_fyq3_inventory = fyq3_inventory.std(axis = 1)
+				fyq3_inventory.assign(min_of_fyq3_inventory = fyq3_inventory.min(axis = 1)
+				fyq3_inventory.assign(max_of_fyq3_inventory = fyq3_inventory.max(axis = 1)
+				fyq3_supply = df['City', [column for column in df.columns if 'Months Supply of Inventory' and k in column]]
+				fyq3_supply.assign(mean_of_fyq3_supply = fyq3_supply.mean(axis = 1)
+				fyq3_supply.assign(median_of_fyq3_supply = fyq3_supply.median(axis = 1)
+				fyq3_supply.assign(stddev_of_fyq3_supply = fyq3_supply.std(axis = 1)
+				fyq3_supply.assign(min_of_fyq3_supply = fyq3_supply.min(axis = 1)
+				fyq3_supply.assign(max_of_fyq3_supply = fyq3_supply.max(axis = 1)
+				new_dict[k]['Q3'] = [fyq3_new_listings, fyq3_closed_sales, fyq3_dom, fyq3_median_sales, fyq3_polpr, fyq3_inventory, fyq3_supply]
+			elif df == v[3]:
+				fyq4_new_listings = df['City', [column for column in df.columns if 'New Listings' and k in column]]
+				fyq4_new_listings.assign(mean_of_fyq4_new_listings = fyq4_new_listings.mean(axis = 1)
+				fyq4_new_listings.assign(median_of_fyq4_new_listings = fyq4_new_listings.median(axis = 1)
+				fyq4_new_listings.assign(stddev_of_fyq4_new_listings = fyq4_new_listings.std(axis = 1)
+				fyq4_new_listings.assign(min_of_fyq4_new_listings = fyq4_new_listings.min(axis = 1)
+				fyq4_new_listings.assign(max_of_fyq4_new_listings = fyq4_new_listings.max(axis = 1)
+				fyq4_closed_sales = df['City', [column for column in df.columns if 'Closed Sales' and k in column]]
+				fyq4_closed_sales.assign(mean_of_fyq4_closed_sales = fyq4_closed_sales.mean(axis = 1)
+				fyq4_closed_sales.assign(median_of_fyq4_closed_sales = fyq4_closed_sales.median(axis = 1)
+				fyq4_closed_sales.assign(stddev_of_fyq4_closed_sales = fyq4_closed_sales.std(axis = 1)
+				fyq4_closed_sales.assign(min_of_fyq4_closed_sales = fyq4_closed_sales.min(axis = 1)
+				fyq4_closed_sales.assign(max_of_fyq4_closed_sales = fyq4_closed_sales.max(axis = 1)
+				fyq4_dom = df['City', [column for column in df.columns if 'Days on Market Until Sale' and k in column]]
+				fyq4_dom.assign(mean_of_fyq4_dom = fyq4_dom.mean(axis = 1)
+				fyq4_dom.assign(median_of_fyq4_dom = fyq4_dom.median(axis = 1)
+				fyq4_dom.assign(stddev_of_fyq4_dom = fyq4_dom.std(axis = 1)
+				fyq4_dom.assign(min_of_fyq4_dom = fyq4_dom.min(axis = 1)
+				fyq4_dom.assign(max_of_fyq4_dom = fyq4_dom.max(axis = 1)
+				fyq4_median_sales = df['City', [column for column in df.columns if 'Median Sales Price' and k in column]]
+				fyq4_median_sales.assign(mean_of_fyq4_median_sales = fyq4_median_sales.mean(axis = 1)
+				fyq4_median_sales.assign(median_of_fyq4_median_sales = fyq4_median_sales.median(axis = 1)
+				fyq4_median_sales.assign(stddev_of_fyq4_median_sales = fyq4_median_sales.std(axis = 1)
+				fyq4_median_sales.assign(min_of_fyq4_median_sales = fyq4_median_sales.min(axis = 1)
+				fyq4_median_sales.assign(max_of_fyq4_median_sales = fyq4_median_sales.max(axis = 1)
+				fyq4_polpr = df['City', [column for column in df.columns if 'Percent of List Price Received' and k in column]]
+				fyq4_polpr.assign(mean_of_fyq4_polpr = fyq4_polpr.mean(axis = 1)
+				fyq4_polpr.assign(median_of_fyq4_polpr = fyq4_polpr.median(axis = 1)
+				fyq4_polpr.assign(stddev_of_fyq4_polpr = fyq4_polpr.std(axis = 1)
+				fyq4_polpr.assign(min_of_fyq4_polpr = fyq4_polpr.min(axis = 1)
+				fyq4_polpr.assign(max_of_fyq4_polpr = fyq4_polpr.max(axis = 1)
+				fyq4_inventory = df['City', [column for column in df.columns if 'Inventory of Homes for Sale' and k in column]]
+				fyq4_inventory.assign(mean_of_fyq4_inventory = fyq4_inventory.mean(axis = 1)
+				fyq4_inventory.assign(median_of_fyq4_inventory = fyq4_inventory.median(axis = 1)
+				fyq4_inventory.assign(stddev_of_fyq4_inventory = fyq4_inventory.std(axis = 1)
+				fyq4_inventory.assign(min_of_fyq4_inventory = fyq4_inventory.min(axis = 1)
+				fyq4_inventory.assign(max_of_fyq4_inventory = fyq4_inventory.max(axis = 1)
+				fyq4_supply = df['City', [column for column in df.columns if 'Months Supply of Inventory' and k in column]]
+				fyq4_supply.assign(mean_of_fyq4_supply = fyq4_supply.mean(axis = 1)
+				fyq4_supply.assign(median_of_fyq4_supply = fyq4_supply.median(axis = 1)
+				fyq4_supply.assign(stddev_of_fyq4_supply = fyq4_supply.std(axis = 1)
+				fyq4_supply.assign(min_of_fyq4_supply = fyq4_supply.min(axis = 1)
+				fyq4_supply.assign(max_of_fyq4_supply = fyq4_supply.max(axis = 1)
+				new_dict[k]['Q4'] = [fyq4_new_listings, fyq4_closed_sales, fyq4_dom, fyq4_median_sales, fyq4_polpr, fyq4_inventory, fyq4_supply]
+			
+
+			
+			# Join all respective categories at the FY version of that dataframe
+			# Isolate the Year key in the dictionary
+			list = ['Q1', 'Q2, 'Q3', 'Q4', 'FY']
+			for k in new_dict.keys():
+				fy_list = new_dict[k]list[-1]
+					for i in range(len(fy_list)):
+						fy_df = fy_list[0][i]
+						q1_df = new_dict[k]list[0][i]
+						q2_df = new_dict[k]list[1][i]
+						q3_df = new_dict[k]list[2][i]
+						q4_df = new_dict[k]list[3][i]
+						#make sure all the indexes are set to 'City'
+				# Not the best naming methods, wont know which one is which
+				final_fy_df = fy_df.join([q1_df, q2_df, q3_df, q4_df])
+				new_dict[k]list[-1].append(final_fy_df)
+							
+						
+						
+			
+
+			
+***v.columns may not be an iterable datatype. If this presents an error, try list(v.columns)[0] which is where the column name will be located
+
+
+for column in v.columns:
+	for mon in ['Jan', 'Feb', 'Mar']:
+		if mon in column:
+		print(column)
+
+
+def pandas2excel(self, dict):
+	#Store the dfs in one Excel file under different sheets for later processing
+	with pd.ExcelWriter(str(datetime.today().month) + ' ' + str(datetime.today().year) + ' NJ 10k Real Estate Data') as writer:
+		for k, v in dict.items():
+
+
+
+
+			if len(temp) > 3:
+				fy_new_listings = df[[column for column in df.columns if 'New Listings' in column if k in column]]
+				fy_new_listings[‘Mean of FY New Listings’] = fy_new_listings.mean(axis = 1)
+				fy_new_listings[‘Median of FY New Listings’] = fy_new_listings.median(axis = 1)
+				fy_new_listings[‘Std Dev of FY New Listings’] = fy_new_listings.std(axis = 1)
+				fy_new_listings[‘Min of FY New Listings’] = fy_new_listings.min(axis = 1)
+				fy_new_listings[‘Max of FY New Listings’] = fy_new_listings.max(axis = 1)
+				fy_closed_sales = df[[column for column in df.columns if 'Closed Sales' in column if k in column]]
+				fy_closed_sales[‘Mean of FY Closed Sales’] = fy_closed_sales.mean(axis = 1)
+				fy_closed_sales[‘Median of FY Closed Sales’] = fy_closed_sales.median(axis = 1)
+				fy_closed_sales[‘Std Dev of FY Closed Sales’] = fy_closed_sales.std(axis = 1)
+				fy_closed_sales[‘Min of FY Closed Sales’] = fy_closed_sales.min(axis = 1)
+				fy_closed_sales[‘Max of FY Closed Sales’] = fy_closed_sales.max(axis = 1)
+				fy_dom = df[[column for column in df.columns if 'Days on Market Until Sale' in column if k in column]]
+				fy_dom[‘Mean of FY Days on Market’] = fy_dom.mean(axis = 1)
+				fy_dom[‘Median of FY Days on Market’] = fy_dom.median(axis = 1)
+				fy_dom[‘Std Dev of FY Days on Market’] = fy_dom.std(axis = 1)
+				fy_dom[‘Min of FY Days on Market’] = fy_dom.min(axis = 1)
+				fy_dom[‘Max of FY Days on Market’] = fy_dom.max(axis = 1)
+				fy_median_sales = df[[column for column in df.columns if ‘Median Sales Prices' in column if k in column]]
+				fy_median_sales[‘Mean of FY Median Sales Price’] = fy_median_sales.mean(axis = 1)
+				fy_median_sales[‘Median of FY Median Sales Price’] = fy_median_sales.median(axis = 1)
+				fy_median_sales[‘Std Dev of FY Median Sales Price’] = fy_median_sales.std(axis = 1)
+				fy_median_sales[‘Min of FY Median Sales Price’] = fy_median_sales.min(axis = 1)
+				fy_median_sales[‘Max of FY Median Sales Price’] = fy_median_sales.max(axis = 1)
+				fy_polpr = df[[column for column in df.columns if 'Percent of List Price Received' in column if k in column]]
+				fy_polpr[‘Mean of FY Percent of List Price Received’] = fy_polpr.mean(axis = 1)
+				fy_polpr[‘Median of FY Percent of List Price Received’] = fy_polpr.median(axis = 1)
+				fy_polpr[‘Std Dev of FY Percent of List Price Received’] = fy_polpr.std(axis = 1)
+				fy_polpr[‘Min of FY Percent of List Price Received’] = fy_polpr.min(axis = 1)
+				fy_polpr[‘Max of FY Percent of List Price Received’] = fy_polpr.max(axis = 1)
+				fy_inventory = df[[column for column in df.columns if ‘Inventory of Homes for Sale’ in column if k in column]]
+				fy_inventory[‘Mean of FY Inventory of Homes’]= fy_inventory.mean(axis = 1)
+				fy_inventory[‘Median of FY Inventory of Homes’]= fy_inventory.median(axis = 1)
+				fy_inventory[‘Std Dev of FY Inventory of Homes’]= fy_inventory.std(axis = 1)
+				fy_inventory[‘Min of FY Inventory of Homes’]= fy_inventory.min(axis = 1)
+				fy_inventory[‘Max of FY Inventory of Homes’]= fy_inventory.max(axis = 1)
+				fy_supply = df[[column for column in df.columns if ‘Months Supply of Inventory’ in column if k in column]]
+				fy_supply[‘Mean of FY Monthly Supply’] = fy_supply.mean(axis = 1)
+				fy_supply[‘Median of FY Monthly Supply’] = fy_supply.median(axis = 1)
+				fy_supply[‘Std Dev of FY Monthly Supply’] = fy_supply.std(axis = 1)
+				fy_supply[‘Min of FY Monthly Supply’] = fy_supply.min(axis = 1)
+				fy_supply[‘Max of FY Monthly Supply’] = fy_supply.max(axis = 1)
+				new_dict[k]['FY'] = [fy_new_listings, fy_closed_sales, fy_dom, fy_median_sales, fy_polpr, fy_inventory, fy_supply]
+			elif 'Jan' in temp[0]:
+				fyq1_new_listings = df[[column for column in df.columns if ‘New Listings’ in column if k in column]]
+				fyq1_new_listings[‘Mean of Q1 New Listings’]= fyq1_new_listings.mean(axis = 1)
+				fyq1_new_listings[‘Median of Q1 New Listings’]= fyq1_new_listings.median(axis = 1)
+				fyq1_new_listings[‘Std Dev of Q1 New Listings’]= fyq1_new_listings.std(axis = 1)
+				fyq1_new_listings[‘Min of Q1 New Listings’]= fyq1_new_listings.min(axis = 1)
+				fyq1_new_listings[‘Max of Q1 New Listings’]= fyq1_new_listings.max(axis = 1)
+				fyq1_closed_sales = df[[column for column in df.columns if ‘Closed Sales’ in column if k in column]]
+				fyq1_closed_sales[‘Mean of Q1 Closed Sales’]= fyq1_closed_sales.mean(axis = 1)
+				fyq1_closed_sales[‘Median of Q1 Closed Sales’]= fyq1_closed_sales.median(axis = 1)
+				fyq1_closed_sales[‘Std Dev of Q1 Closed Sales’]= fyq1_closed_sales.std(axis = 1)
+				fyq1_closed_sales[‘Min of Q1 Closed Sales’]= fyq1_closed_sales.min(axis = 1)
+				fyq1_closed_sales[‘Max of Q1 Closed Sales’]= fyq1_closed_sales.max(axis = 1)
+				fyq1_dom = df[[column for column in df.columns if ‘Days on Market Until Sale’ in column if k in column]]
+				fyq1_dom[‘Mean of Q1 Days on the Market’]= fyq1_dom.mean(axis = 1)
+				fyq1_dom[‘Median of Q1 Days on the Market’]= fyq1_dom.median(axis = 1)
+				fyq1_dom[‘Std Dev of Q1 Days on the Market’]= fyq1_dom.std(axis = 1)
+				fyq1_dom[‘Min of Q1 Days on the Market’]= fyq1_dom.min(axis = 1)
+				fyq1_dom[‘Max of Q1 Days on the Market’]= fyq1_dom.max(axis = 1)
+				fyq1_median_sales = df[[column for column in df.columns if ‘Median Sales Price’ in column if k in column]]
+				fyq1_median_sales[‘Mean of Q1 Median Sales’] = fyq1_median_sales.mean(axis = 1)
+				fyq1_median_sales[‘Median of Q1 Median Sales’] = fyq1_median_sales.median(axis = 1)
+				fyq1_median_sales[‘Std Dev of Q1 Median Sales’] = fyq1_median_sales.std(axis = 1)
+				fyq1_median_sales[‘Min of Q1 Median Sales’] = fyq1_median_sales.min(axis = 1)
+				fyq1_median_sales[‘Max of Q1 Median Sales’] = fyq1_median_sales.max(axis = 1)
+				fyq1_polpr = df[[column for column in df.columns if ‘Percent of List Price Received’ in column if k in column]]
+				fyq1_polpr[‘Mean of Q1 Percentage of Listing Price Received’] = fyq1_polpr.mean(axis = 1)
+				fyq1_polpr[‘Median of Q1 Percentage of Listing Price Received’] = fyq1_polpr.median(axis = 1)
+				fyq1_polpr[‘Std Dev of Q1 Percentage of Listing Price Received’] = fyq1_polpr.std(axis = 1)
+				fyq1_polpr[‘Min of Q1 Percentage of Listing Price Received’] = fyq1_polpr.min(axis = 1)
+				fyq1_polpr[‘Max of Q1 Percentage of Listing Price Received’] = fyq1_polpr.max(axis = 1)
+				fyq1_inventory = df[[column for column in df.columns if ‘Inventory of Homes for Sale’ in column if k in column]]
+				fyq1_inventory[‘Mean of Q1 Inventory of Homes’] = fyq1_inventory.mean(axis = 1)
+				fyq1_inventory[‘Median of Q1 Inventory of Homes’] = fyq1_inventory.median(axis = 1)
+				fyq1_inventory[‘Std Dev of Q1 Inventory of Homes’] = fyq1_inventory.std(axis = 1)
+				fyq1_inventory[‘Min of Q1 Inventory of Homes’] = fyq1_inventory.min(axis = 1)
+				fyq1_inventory[‘Max of Q1 Inventory of Homes’] = fyq1_inventory.max(axis = 1)
+				fyq1_supply = df[[column for column in df.columns if ‘Months Supply of Inventory’ in column if k in column]]
+				fyq1_supply[‘Mean of Q1 Monthly Supply’] = fyq1_supply.mean(axis = 1)
+				fyq1_supply[‘Median of Q1 Monthly Supply’] = fyq1_supply.median(axis = 1)
+				fyq1_supply[‘Std Dev of Q1 Monthly Supply’] = fyq1_supply.std(axis = 1)
+				fyq1_supply[‘Min of Q1 Monthly Supply’] = fyq1_supply.min(axis = 1)
+				fyq1_supply[‘Max of Q1 Monthly Supply’] = fyq1_supply.max(axis = 1)
+				new_dict[k]['Q1'] = [fyq1_new_listings, fyq1_closed_sales, fyq1_dom, fyq1_median_sales, fyq1_polpr, fyq1_inventory, fyq1_supply]
+			elif 'Apr' in temp[0]:
+				fyq2_new_listings = df[[column for column in df.columns if ‘New Listings’ in column if k in column]]
+				fyq2_new_listings[‘Mean of Q2 New Listings’]= fyq2_new_listings.mean(axis = 1)
+				fyq2_new_listings[‘Median of Q2 New Listings’]= fyq2_new_listings.median(axis = 1)
+				fyq2_new_listings[‘Std Dev of Q2 New Listings’]= fyq2_new_listings.std(axis = 1)
+				fyq2_new_listings[‘Min of Q2 New Listings’]= fyq2_new_listings.min(axis = 1)
+				fyq2_new_listings[‘Max of Q2 New Listings’]= fyq2_new_listings.max(axis = 1)
+				fyq2_closed_sales = df[[column for column in df.columns if ‘Closed Sales’ in column if k in column]]
+				fyq2_closed_sales[‘Mean of Q2 Closed Sales’]= fyq2_closed_sales.mean(axis = 1)
+				fyq2_closed_sales[‘Median of Q2 Closed Sales’]= fyq2_closed_sales.median(axis = 1)
+				fyq2_closed_sales[‘Std Dev of Q2 Closed Sales’]= fyq2_closed_sales.std(axis = 1)
+				fyq2_closed_sales[‘Min of Q2 Closed Sales’]= fyq2_closed_sales.min(axis = 1)
+				fyq2_closed_sales[‘Max of Q2 Closed Sales’]= fyq2_closed_sales.max(axis = 1)
+				fyq2_dom = df[[column for column in df.columns if ‘Days on Market Until Sale’ in column if k in column]]
+				fyq2_dom[‘Mean of Q2 Days on the Market’]= fyq2_dom.mean(axis = 1)
+				fyq2_dom[‘Median of Q2 Days on the Market’]= fyq2_dom.median(axis = 1)
+				fyq2_dom[‘Std Dev of Q2 Days on the Market’]= fyq2_dom.std(axis = 1)
+				fyq2_dom[‘Min of Q2 Days on the Market’]= fyq2_dom.min(axis = 1)
+				fyq2_dom[‘Max of Q2 Days on the Market’]= fyq2_dom.max(axis = 1)
+				fyq2_median_sales = df[[column for column in df.columns if ‘Median Sales Price’ in column if k in column]]
+				fyq2_median_sales[‘Mean of Q2 Median Sales’] = fyq2_median_sales.mean(axis = 1)
+				fyq2_median_sales[‘Median of Q2 Median Sales’] = fyq2_median_sales.median(axis = 1)
+				fyq2_median_sales[‘Std Dev of Q2 Median Sales’] = fyq2_median_sales.std(axis = 1)
+				fyq2_median_sales[‘Min of Q2 Median Sales’] = fyq2_median_sales.min(axis = 1)
+				fyq2_median_sales[‘Max of Q2 Median Sales’] = fyq2_median_sales.max(axis = 1)
+				fyq2_polpr = df[[column for column in df.columns if ‘Percent of List Price Received’ in column if k in column]]
+				fyq2_polpr[‘Mean of Q2 Percentage of Listing Price Received’] = fyq2_polpr.mean(axis = 1)
+				fyq2_polpr[‘Median of Q2 Percentage of Listing Price Received’] = fyq2_polpr.median(axis = 1)
+				fyq2_polpr[‘Std Dev of Q2 Percentage of Listing Price Received’] = fyq2_polpr.std(axis = 1)
+				fyq2_polpr[‘Min of Q2 Percentage of Listing Price Received’] = fyq2_polpr.min(axis = 1)
+				fyq2_polpr[‘Max of Q2 Percentage of Listing Price Received’] = fyq2_polpr.max(axis = 1)
+				fyq2_inventory = df[[column for column in df.columns if ‘Inventory of Homes for Sale’ in column if k in column]]
+				fyq2_inventory[‘Mean of Q2 Inventory of Homes’] = fyq2_inventory.mean(axis = 1)
+				fyq2_inventory[‘Median of Q2 Inventory of Homes’] = fyq2_inventory.median(axis = 1)
+				fyq2_inventory[‘Std Dev of Q2 Inventory of Homes’] = fyq2_inventory.std(axis = 1)
+				fyq2_inventory[‘Min of Q2 Inventory of Homes’] = fyq2_inventory.min(axis = 1)
+				fyq2_inventory[‘Max of Q2 Inventory of Homes’] = fyq2_inventory.max(axis = 1)
+				fyq2_supply = df[[column for column in df.columns if ‘Months Supply of Inventory’ in column if k in column]]
+				fyq2_supply[‘Mean of Q2 Monthly Supply’] = fyq2_supply.mean(axis = 1)
+				fyq2_supply[‘Median of Q2 Monthly Supply’] = fyq2_supply.median(axis = 1)
+				fyq2_supply[‘Std Dev of Q2 Monthly Supply’] = fyq2_supply.std(axis = 1)
+				fyq2_supply[‘Min of Q2 Monthly Supply’] = fyq2_supply.min(axis = 1)
+				fyq2_supply[‘Max of Q2 Monthly Supply’] = fyq2_supply.max(axis = 1)
+				new_dict[k]['Q2'] = [fyq2_new_listings, fyq2_closed_sales, fyq2_dom, fyq2_median_sales, fyq2_polpr, fyq2_inventory, fyq2_supply]
+			elif 'Jul' in temp[0]:
+				fyq3_new_listings = df[[column for column in df.columns if ‘New Listings’ in column if k in column]]
+				fyq3_new_listings[‘Mean of Q3 New Listings’]= fyq3_new_listings.mean(axis = 1)
+				fyq3_new_listings[‘Median of Q3 New Listings’]= fyq3_new_listings.median(axis = 1)
+				fyq3_new_listings[‘Std Dev of Q3 New Listings’]= fyq3_new_listings.std(axis = 1)
+				fyq3_new_listings[‘Min of Q3 New Listings’]= fyq3_new_listings.min(axis = 1)
+				fyq3_new_listings[‘Max of Q3 New Listings’]= fyq3_new_listings.max(axis = 1)
+				fyq3_closed_sales = df[[column for column in df.columns if ‘Closed Sales’ in column if k in column]]
+				fyq3_closed_sales[‘Mean of Q3 Closed Sales’]= fyq3_closed_sales.mean(axis = 1)
+				fyq3_closed_sales[‘Median of Q3 Closed Sales’]= fyq3_closed_sales.median(axis = 1)
+				fyq3_closed_sales[‘Std Dev of Q3 Closed Sales’]= fyq3_closed_sales.std(axis = 1)
+				fyq3_closed_sales[‘Min of Q3 Closed Sales’]= fyq3_closed_sales.min(axis = 1)
+				fyq3_closed_sales[‘Max of Q3 Closed Sales’]= fyq3_closed_sales.max(axis = 1)
+				fyq3_dom = df[[column for column in df.columns if ‘Days on Market Until Sale’ in column if k in column]]
+				fyq3_dom[‘Mean of Q3 Days on the Market’]= fyq3_dom.mean(axis = 1)
+				fyq3_dom[‘Median of Q3 Days on the Market’]= fyq3_dom.median(axis = 1)
+				fyq3_dom[‘Std Dev of Q3 Days on the Market’]= fyq3_dom.std(axis = 1)
+				fyq3_dom[‘Min of Q3 Days on the Market’]= fyq3_dom.min(axis = 1)
+				fyq3_dom[‘Max of Q3 Days on the Market’]= fyq3_dom.max(axis = 1)
+				fyq3_median_sales = df[[column for column in df.columns if ‘Median Sales Price’ in column if k in column]]
+				fyq3_median_sales[‘Mean of Q3 Median Sales’] = fyq3_median_sales.mean(axis = 1)
+				fyq3_median_sales[‘Median of Q3 Median Sales’] = fyq3_median_sales.median(axis = 1)
+				fyq3_median_sales[‘Std Dev of Q3 Median Sales’] = fyq3_median_sales.std(axis = 1)
+				fyq3_median_sales[‘Min of Q3 Median Sales’] = fyq3_median_sales.min(axis = 1)
+				fyq3_median_sales[‘Max of Q3 Median Sales’] = fyq3_median_sales.max(axis = 1)
+				fyq3_polpr = df[[column for column in df.columns if ‘Percent of List Price Received’ in column if k in column]]
+				fyq3_polpr[‘Mean of Q3 Percentage of Listing Price Received’] = fyq3_polpr.mean(axis = 1)
+				fyq3_polpr[‘Median of Q3 Percentage of Listing Price Received’] = fyq3_polpr.median(axis = 1)
+				fyq3_polpr[‘Std Dev of Q3 Percentage of Listing Price Received’] = fyq3_polpr.std(axis = 1)
+				fyq3_polpr[‘Min of Q3 Percentage of Listing Price Received’] = fyq3_polpr.min(axis = 1)
+				fyq3_polpr[‘Max of Q3 Percentage of Listing Price Received’] = fyq3_polpr.max(axis = 1)
+				fyq3_inventory = df[[column for column in df.columns if ‘Inventory of Homes for Sale’ in column if k in column]]
+				fyq3_inventory[‘Mean of Q3 Inventory of Homes’] = fyq3_inventory.mean(axis = 1)
+				fyq3_inventory[‘Median of Q3 Inventory of Homes’] = fyq3_inventory.median(axis = 1)
+				fyq3_inventory[‘Std Dev of Q3 Inventory of Homes’] = fyq3_inventory.std(axis = 1)
+				fyq3_inventory[‘Min of Q3 Inventory of Homes’] = fyq3_inventory.min(axis = 1)
+				fyq3_inventory[‘Max of Q3 Inventory of Homes’] = fyq3_inventory.max(axis = 1)
+				fyq3_supply = df[[column for column in df.columns if ‘Months Supply of Inventory’ in column if k in column]]
+				fyq3_supply[‘Mean of Q3 Monthly Supply’] = fyq3_supply.mean(axis = 1)
+				fyq3_supply[‘Median of Q3 Monthly Supply’] = fyq3_supply.median(axis = 1)
+				fyq3_supply[‘Std Dev of Q3 Monthly Supply’] = fyq3_supply.std(axis = 1)
+				fyq3_supply[‘Min of Q3 Monthly Supply’] = fyq3_supply.min(axis = 1)
+				fyq3_supply[‘Max of Q3 Monthly Supply’] = fyq3_supply.max(axis = 1)
+				new_dict[k]['Q3'] = [fyq3_new_listings, fyq3_closed_sales, fyq3_dom, fyq3_median_sales, fyq3_polpr, fyq3_inventory, fyq3_supply]
+			elif 'Oct' in temp[0]:
+				fyq4_new_listings = df[[column for column in df.columns if ‘New Listings’ in column if k in column]]
+				fyq4_new_listings[‘Mean of Q4 New Listings’]= fyq4_new_listings.mean(axis = 1)
+				fyq4_new_listings[‘Median of Q4 New Listings’]= fyq4_new_listings.median(axis = 1)
+				fyq4_new_listings[‘Std Dev of Q4 New Listings’]= fyq4_new_listings.std(axis = 1)
+				fyq4_new_listings[‘Min of Q4 New Listings’]= fyq4_new_listings.min(axis = 1)
+				fyq4_new_listings[‘Max of Q4 New Listings’]= fyq4_new_listings.max(axis = 1)
+				fyq4_closed_sales = df[[column for column in df.columns if ‘Closed Sales’ in column if k in column]]
+				fyq4_closed_sales[‘Mean of Q4 Closed Sales’]= fyq4_closed_sales.mean(axis = 1)
+				fyq4_closed_sales[‘Median of Q4 Closed Sales’]= fyq4_closed_sales.median(axis = 1)
+				fyq4_closed_sales[‘Std Dev of Q4 Closed Sales’]= fyq4_closed_sales.std(axis = 1)
+				fyq4_closed_sales[‘Min of Q4 Closed Sales’]= fyq4_closed_sales.min(axis = 1)
+				fyq4_closed_sales[‘Max of Q4 Closed Sales’]= fyq4_closed_sales.max(axis = 1)
+				fyq4_dom = df[[column for column in df.columns if ‘Days on Market Until Sale’ in column if k in column]]
+				fyq4_dom[‘Mean of Q4 Days on the Market’]= fyq4_dom.mean(axis = 1)
+				fyq4_dom[‘Median of Q4 Days on the Market’]= fyq4_dom.median(axis = 1)
+				fyq4_dom[‘Std Dev of Q4 Days on the Market’]= fyq4_dom.std(axis = 1)
+				fyq4_dom[‘Min of Q4 Days on the Market’]= fyq4_dom.min(axis = 1)
+				fyq4_dom[‘Max of Q4 Days on the Market’]= fyq4_dom.max(axis = 1)
+				fyq4_median_sales = df[[column for column in df.columns if ‘Median Sales Price’ in column if k in column]]
+				fyq4_median_sales[‘Mean of Q4 Median Sales’] = fyq4_median_sales.mean(axis = 1)
+				fyq4_median_sales[‘Median of Q4 Median Sales’] = fyq4_median_sales.median(axis = 1)
+				fyq4_median_sales[‘Std Dev of Q4 Median Sales’] = fyq4_median_sales.std(axis = 1)
+				fyq4_median_sales[‘Min of Q4 Median Sales’] = fyq4_median_sales.min(axis = 1)
+				fyq4_median_sales[‘Max of Q4 Median Sales’] = fyq4_median_sales.max(axis = 1)
+				fyq4_polpr = df[[column for column in df.columns if ‘Percent of List Price Received’ in column if k in column]]
+				fyq4_polpr[‘Mean of Q4 Percentage of Listing Price Received’] = fyq4_polpr.mean(axis = 1)
+				fyq4_polpr[‘Median of Q4 Percentage of Listing Price Received’] = fyq4_polpr.median(axis = 1)
+				fyq4_polpr[‘Std Dev of Q4 Percentage of Listing Price Received’] = fyq4_polpr.std(axis = 1)
+				fyq4_polpr[‘Min of Q4 Percentage of Listing Price Received’] = fyq4_polpr.min(axis = 1)
+				fyq4_polpr[‘Max of Q4 Percentage of Listing Price Received’] = fyq4_polpr.max(axis = 1)
+				fyq4_inventory = df[[column for column in df.columns if ‘Inventory of Homes for Sale’ in column if k in column]]
+				fyq4_inventory[‘Mean of Q4 Inventory of Homes’] = fyq4_inventory.mean(axis = 1)
+				fyq4_inventory[‘Median of Q4 Inventory of Homes’] = fyq4_inventory.median(axis = 1)
+				fyq4_inventory[‘Std Dev of Q4 Inventory of Homes’] = fyq4_inventory.std(axis = 1)
+				fyq4_inventory[‘Min of Q4 Inventory of Homes’] = fyq4_inventory.min(axis = 1)
+				fyq4_inventory[‘Max of Q4 Inventory of Homes’] = fyq4_inventory.max(axis = 1)
+				fyq4_supply = df[[column for column in df.columns if ‘Months Supply of Inventory’ in column if k in column]]
+				fyq4_supply[‘Mean of Q4 Monthly Supply’] = fyq4_supply.mean(axis = 1)
+				fyq4_supply[‘Median of Q4 Monthly Supply’] = fyq4_supply.median(axis = 1)
+				fyq4_supply[‘Std Dev of Q4 Monthly Supply’] = fyq4_supply.std(axis = 1)
+				fyq4_supply[‘Min of Q4 Monthly Supply’] = fyq4_supply.min(axis = 1)
+				fyq4_supply[‘Max of Q4 Monthly Supply’] = fyq4_supply.max(axis = 1)
+				new_dict[k]['Q4'] = [fyq4_new_listings, fyq4_closed_sales, fyq4_dom, fyq4_median_sales, fyq4_polpr, fyq4_inventory, fyq4_supply]
+			

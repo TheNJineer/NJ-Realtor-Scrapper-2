@@ -1,0 +1,382 @@
+1) Replace the parsing of the 2nd try loop after the login with BeautifulSoup
+    instead of using Regex (COMPLETED)
+2) Parse the soup object to find all the towns and counties (COMPLETED)
+3) Use the 'lxml' or 'html5lib' parsers since the built in BS4 parser may produce NoneTypes in the findalls
+4) Create a class variable that stores the last time the class was run
+    last_run = recent_results() (COMPLETED)
+5) Create a self variable that stores the current date in the __init__ method (COMPLETED)
+6) Create a function called area_results(self, soup) (COMPLETED)
+    area = soup.find('select', id="lmuArea").children
+    for obj in area:
+        #see what form the area object comes in. If its a tuple, cast it into a list
+        newobj = obj.get_text()
+        if 'County' in newobj:
+            #I believe there are multiple towns in different counties with the same name. Their county is attached
+            #and need to be seperated from the target values
+            if '/' in newobj:
+                newobj = newobj.split('/')
+                city = newobj[0]
+                self.__towns.append(city)
+            else:
+                county = newobj.rstrip(' County')
+                self.__counties.append(county)
+        else:
+            self.__towns.append(newobj)
+
+7) Create a function called recent_results(self, soup) (COMPLETED)
+    results = soup.find('select', id="lmuTime").children
+    results = list(results)
+    month_year = results[1].get_text()
+    target = month_year.split(' ')
+    year = target[1]
+    month = target[0]
+    if year in self.__years:
+        pass
+    else:
+        self.__years.append(year)
+
+    return month_year
+
+8) 4) Try this urllib.request code to download readable pdfs: (COMPLETED)
+    try:
+        new_filename = " ".join([town, month, year]) + ".pdf"
+        local_filename, headers = urllib.request.urlretrieve(driver.current_url)
+        with open(local_filename, 'rb') as reader, open(new_filename, 'wb') as writer:
+          target_pdf = reader.readlines()
+          for item in target_pdf:
+             writer.write(item)
+          logger.info(f'The data for {town} {year} Has Been Successfully Downloaded')
+    except IOError as e:
+        logger.exception("IOError Occured: ", strerror.(e.errno))
+
+9) Update the function called njrdata(self) (COMPLETED)
+count = len(self.__towns)
+for town in self.__towns:
+     dropdown1 = driver.find_element(By.XPATH, "//select[@id='lmuArea']")
+     dropdown1.click()
+     target_town = driver.find_element(By.XPATH, "//option[@value='" + town + "']")
+     target_town.click()
+     for year in self.__years:
+        for month_num, month in self.__months.items():
+            dropdown2 = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, "//select[@id='lmuTime']"))
+                                    )
+            dropdown2.click()
+            try:
+                target_date = WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.XPATH,"//select[@id='lmuTime']//option[@value='" + year + "-" + month_num + "'][normalize-space()='" + month + ' ' + year + "']"))
+                                        )
+                target_date.click()
+                view_report = driver.find_element(By.XPATH,"//div[@rel='lmu']//button[contains(text(),'View Report')]")
+                view_report.click()
+                tabs = driver.window_handles
+                driver.switch_to.window(tabs[1])
+                current = driver.current_window_handle
+                try:
+                    new_filename = " ".join([town, month, year]) + ".pdf"
+                    local_filename, headers = urllib.requests.urlretrieve(driver.current_url)
+                    with open(local_filename, 'rb') as reader, open(new_filename, 'wb') as writer:
+                        target_pdf = reader.readlines()
+                        writer.write(target_pdf)
+                except IOError as e:
+                    logger.exception("IOError Occured: ", strerror.(e.errno))
+            except:
+                pass
+
+10) Create a function called update_njrdata(self, recent_results(soup))
+11) Import all of the Selenium exceptions necessary (COMPLETED)
+12) Move the njrdata self varaibles into the Superclass __init__ method (COMPLETED)
+13) Create Regex patterns to find the City, County and Month of the PDF (COMPLETED)
+14) Create Regex pattern to recognize the month of December and scrape the Full Year data?
+15) Create a function or class method that creates a standard dictionary where the data is stored (COMPLETED)
+16) Make sure to import the necessary exception handlers and loggers for this function (COMPLETED)
+17) Write the info in chuncked responses to it doesnt get corrupted (COMPLETED)
+18) The 'continue' keyword or the end of the try-except breaks the session and produces errors going forward
+    Find a way to start a new session every time? of keep the same session going (COMPLETE)
+19) Change the NJR10k logger directory to my Python Folder
+20) Create a set_default function if necessary (NOT NECESSARY)
+21) Add the year to the YoY Change % (NOT NECESSARY)
+22) Inspect page, Network, XHR, Response in the webbrowser Dev Tools
+23) Play a sound when the program is complete and possibly when there's an error (send yourself the StackOverflow link to get an example) (COMPLETED)
+24) Create a seperate function that pulls the website username and pw (COMPLETED)
+25) Save the different Pandas df into seperate sheets of the same Excel workbook (send yourself the StackOverflow link to get an example)
+26) Create a function that append the appropiate sheet in the target Excel workbook
+27) See where list comprehension can be used in the program
+28) Create a list for possibly corrupted files and an enlighten progress bar for them
+		        possible_corrupted_files = []
+29) Find a way to read the contents of the stream, if it contains html then add it to the corrupted list
+			if y == '2019':
+                            months1 = months[8:13]
+                            for m in months1:
+                                time.sleep(0.1)
+                                months_tracker.update()
+                                url3 = base_url + y + '-' + m + '/x/' + city
+                                new_filename = " ".join([city0[0], self.__months[m], y]) + ".pdf"
+                                with session.get(url3, params=params, stream = True) as reader, open(new_filename, 'wb') as writer:
+                                    for chunk in reader.iter_content(chunk_size=1000000):
+                                        check_pdf = chunk.content
+					#print(check_pdf)
+					#See the contents of the pdf to see if 'html' is metioned at all in it. If not, continue writing into new file
+					#If not, add it to the possible_corrupted_files list
+					if 'DOCTYPE' not in check_pdf:
+                                        	writer.write(chunk)
+					elif 'DOCTYPE' in check_pdf:
+						possible_corrupted_files.append(new_filename)
+						#Enter logger here
+						
+                        elif y != '2019':
+                            for m in months:
+                                time.sleep(0.1)
+                                months_tracker.update()
+                                url3 = base_url + y + '-' + m + '/x/' + city
+                                new_filename = " ".join([city0[0], self.__months[m], y]) + ".pdf"
+                                with session.get(url3, params=params, stream = True) as reader, open(new_filename, 'wb') as writer:
+                                    for chunk in reader.iter_content(chunk_size=1000000):
+                                        check_pdf = chunk.content
+					#print(check_pdf)
+					#See the contents of the pdf to see if 'html' is metioned at all in it. If not, continue writing into new file
+					#If not, add it to the possible_corrupted_files list
+					if 'DOCTYPE' not in check_pdf:
+                                        	writer.write(chunk)
+					elif 'DOCTYPE' in check_pdf:
+						possible_corrupted_files.append(new_filename)
+						#Enter logger here
+30) Remove the "$" from the median sales prices columns (COMPLETED)
+	        median_sales_pattern = re.compile(r'Median\sSales\sPrice\*\s(\$\d{1,3}?,\d{3})\s(\$\d{1,3}?,\d{3})\s((\+|-)\s\d{1,3}?.\d{1}%)')
+            median_sales_search = list(median_sales_pattern.findall(target))
+            median_sales_current = median_sales_search[0][1]
+	        median_sales_current = int("".join(median_sales_current.split(',')).lstrip('$'))
+            median_sales_previous = median_sales_search[0][0]
+	        median_sales_previous = int("".join(median_sales_previous.split(',')).lstrip('$'))
+            median_sales_pc = median_sales_search[0][2].split(' ')
+            median_sales_per_change = ''.join([median_sales_pc[0], median_sales_pc[1]])
+
+31) Format the percentages and other columns to floats (COMPLETED)
+	        new_listings_pattern = re.compile(r'New\sListings\s(-|\d{0,3}?)\s(-|\d{0,3}?)\s((\+|-)\s\d{1,3}?.\d{1}%)')
+            new_listing_search = list(new_listings_pattern.findall(target))
+            new_listings_current = int(new_listing_search[0][1])
+            new_listings_previous = int(new_listing_search[0][0])
+            new_listings_pc= str(new_listing_search[0][2]).split(' ')
+            new_listings_per_change = ''.join([new_listings_pc[0], new_listings_pc[1]])
+            closed_sales_pattern = re.compile(r'Closed\sSales\s(-|\d{0,3}?)\s(-|\d{0,3}?)\s((\+|-)\s\d{1,3}?.\d{1}%)')
+            closed_sales_search = list(closed_sales_pattern.findall(target))
+            closed_sales_current = int(closed_sales_search[0][1])
+            closed_sales_previous = int(closed_sales_search[0][0])
+            closed_sales_pc = closed_sales_search[0][2].split(' ')
+            closed_sales_per_change = ''.join([closed_sales_pc[0], closed_sales_pc[1]])
+            DOM_pattern = re.compile(r'Days\son\sMarket\sUntil\sSale\s(-|\d{0,3}?)\s(-|\d{0,3}?)\s((\+|-)\s\d{1,3}?.\d{1}%)')
+            DOM_search = list(DOM_pattern.findall(target))
+            DOM_current = int(DOM_search[0][1])
+            DOM_previous = int(DOM_search[0][0])
+            DOM_pc = DOM_search[0][2].split(' ')
+            DOM_per_change = ''.join([DOM_pc[0], DOM_pc[1]])
+	        percent_lpr_pattern = re.compile(r'Percent\sof\sList\sPrice\sReceived\*\s(\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s((\+|-)\s\d{1,3}?.\d{1}%)')
+            percent_lpr_search = list(percent_lpr_pattern.findall(target))
+	        #Divide this by 100 and figure out how to format these to show the percent sign
+            percent_lpr_current = float(percent_lpr_search[0][1].rstrip('%'))
+            percent_lpr_previous = float(percent_lpr_search[0][0].rstrip('%'))
+            percent_lpr_pc = percent_lpr_search[0][2].split(' ')
+            percent_lpr_per_change = ''.join([percent_lpr_pc[0], percent_lpr_pc[1]])
+            inventory_pattern = re.compile(r'Inventory\sof\sHomes\sfor\sSale\s(-|\d{0,3}?)\s(-|\d{0,3}?)\s((\+|-)\s\d{1,3}?.\d{1}%)')
+            inventory_search = list(inventory_pattern.findall(target))
+            inventory_current = int(inventory_search[0][1])
+            inventory_previous = int(inventory_search[0][0])
+            inventory_pc = inventory_search[0][2].split(' ')
+            inventory_per_change = ''.join([inventory_pc[0], inventory_pc[1]])
+            supply_pattern = re.compile(r'Months\sSupply\sof\sInventory\s(\d{1,2}?.\d{1})\s(\d{1,2}?.\d{1})\s((\+|-)\s\d{1,3}?.\d{1}%)')
+            supply_search = list(supply_pattern.findall(target))
+            supply_current = float(supply_search[0][1])
+            supply_previous = float(supply_search[0][0])
+            supply_pc = supply_search[0][2].split(' ')
+            supply_per_change = ''.join([supply_pc[0], supply_pc[1]])
+
+32) Add enlighten progress bars to pdf downloads and pdf processors
+    Figure out how to track multiple progress bars with the manager
+33) Save Python files to the shelf to save previous  values and results
+
+	    Look into book on page 184 and 185 to write the code
+
+34) Send text message to phone once the program completes with a summary of what occurred
+35) Create a generator to the feed the pdfs into the reader function
+36) Create a function that organizes all of the files in the Python Temp files folder
+	def OrganizeFiles(self, list):
+		#import shutil
+		base_path = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files'
+		years = {}
+		for filenames in os.walk(base_path):
+			for filename in filenames:
+				target = filename.rstrip('.pdf').split(' ')
+				year = target[-1]
+				if year not in years:
+					years.add(year)
+				for i in years:
+					target_path = path + '\\' + i
+					if os.path.exists(target_path):
+						shutil.move(filename, target_path)
+						continue
+					elif os.path.exists(target_path) == False:
+						os.makedirs(target_path)
+						shutil.move(filename, target_path)
+						continue
+		
+				
+37) Zip all the files after they are processed
+
+	#This is the current python directory all files are being saved in 
+	os.chdir('C:\\Users\\Omar\\Desktop\\Selenium Temp Folder')
+	#Rename Selenium Temp Folder to Python Temp Folder and add a folder called PDF Temp Files as use that throughout the Scraper class
+	os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files')
+	import zipfile
+	folder = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files'
+	def CreateZip(self, folder):
+	
+		newZip = zipfile.Zipfile(str(datetime.datetime.now()) + '_NJRealtor.zip', 'w')
+		for foldername, subfolders, filenames in os.walk(folder):
+			#I need to look further into this os.walk to see how to properly add the folders and files to the zip
+			newZip.write(foldername)
+			for filename in filenames:
+				#Figure out how to correctly write this code
+				newZip.write
+		newZip.close()
+		#Create new PDF Temp Files folder at the end of the process
+	
+
+38) Create a function which will process possible corrupted files 
+
+	    def corrupted_files(self, list):
+            dict = {}
+            #Do I want to delete the corrupted files before redownloading them?
+            for n, i in list:
+                info = i.rstrip('.pdf').split(' ')
+                town = info[0:len(info) - 2]
+                if len(town) > 1:
+                    town = ' '.join(town)
+                month = info[-2]
+                year = info[-1]
+
+                for m, i in enumerate(self.__towns):
+                    if town in i:
+                        town = self.__towns[m]
+                        dict[n] = [town, month, year]
+
+            base_url = 'http://njar.stats.10kresearch.com/docs/lmu/'
+
+                with requests.Session() as session:
+                        username, pw = self.get_us_pw('NJRealtor')
+
+                        payload1 = {'rd': '10',
+                                'passedURL': '/goto/10k/',
+                                'case': '',
+                                'LoginEmail': username,
+                                'LoginPassword': pw,
+                                'LoginButton': 'Login'}
+
+                        params = {'src': 'Page'}
+                        #months = list(self.__months.keys())
+
+                        #months_tracker = manager.counter(total=len(months), desc=f'Year:', unit='Months')
+
+                        url = 'https://www.njrealtor.com/login/?rd=10&passedURL=/goto/10k/'
+                        url2 = 'https://www.njrealtor.com/ramco-api/web-services/login_POST.php'
+
+                        response = session.get(url)
+                        r_post = session.post(url2, data=payload1)
+
+                        for k, v in dict.items():
+                    city0 = v[0].split(' ')
+                    city = ''.join(city0)
+                    y = v[2]
+                    for k, v in self.__months.items():
+                        if month in v:
+                            m = k
+                try:
+                    url3 = base_url + y + '-' + m + '/x/' + city
+                                new_filename = " ".join([city0[0], self.__months[m], y]) + ".pdf"
+                                with session.get(url3, params=params, stream = True) as reader, open(new_filename, 'wb') as writer:
+                                    for chunk in reader.iter_content(chunk_size=1000000):
+                                                #target_pdf = reader.content
+                                                writer.write(chunk)
+
+39) Define a function that will process the main_dictionary
+
+	def CreatePandasDF(self, dictionary):
+		#import json
+		jdata = json.loads(dictionary)
+		df = pd.DataFrame(jdata)
+		#This may not be correct or produce what I want
+
+40) Extend code to add future years into main_dictionary (COMPLETED)
+
+	def current_data_avail(self, soup):
+        results = soup.find('select', id="lmuTime").children
+        results = list(results)
+        month_year = results[2].get_text()
+        target = month_year.split(' ')
+        year = target[1]
+        month = target[0]
+        if year not in self.__years:
+            self.__years.append(year)
+	    main_dictionary[year] = {}
+
+41) Create a class variable holding a empty dictionary. Create a function called
+    event_log which keeps track of everytime the program was run, whats the most recent month pulled in that run,
+    how many files were downloaded, if there were any corrupted files. Send it to the logger file as well
+    ***Create a function which counted the how many days it takes for the next batch of data to be uploaded. At the start of every month,
+    check the website everyday to see if new data is uploaded, from there create a deltatime variable which keeps track of the start and end
+    date in days (COMPLETED)
+
+Test String:
+Key Metrics 2022 2023 Percent Change Thru 4-2022 Thru 4-2023 Percent Change
+New Listings 25 13 - 48.0% 85 64 - 24.7%
+Closed Sales 11 9 - 18.2% 46 37 - 19.6%
+Days on Market Until Sale 36 42 + 16.7% 32 37 + 15.6%
+Median Sales Price* $90,000 $101,000 + 12.2% $116,250 $95,000 - 18.3%
+Percent of List Price Received* 107.8% 94.6% - 12.2% 99.7% 93.6% - 6.1%
+Inventory of Homes for Sale 59 25 - 57.6% -- -- --
+Months Supply of Inventory 4.8 2.0 - 58.3% -- -- --
+Key Metrics 2022 2023 Percent Change Thru 4-2022 Thru 4-2023 Percent Change
+New Listings 39 32 - 17.9% 134 131 - 2.2%
+Closed Sales 19 34 + 78.9% 75 100 + 33.3%
+Days on Market Until Sale 26 30 + 15.4% 39 46 + 17.9%
+Median Sales Price* $70,000 $92,000 + 31.4% $72,334 $95,000 + 31.3%
+Percent of List Price Received* 102.3% 99.8% - 2.4% 98.5% 97.6% - 0.9%
+Inventory of Homes for Sale 86 61 - 29.1% -- -- --
+Months Supply of Inventory 3.7 2.2 - 40.5% -- -- --
+Key Metrics 2022 2023 Percent Change Thru 4-2022 Thru 4-2023 Percent Change
+New Listings 0 0 -- 0 0 --
+Closed Sales 0 0 -- 0 0 --
+Days on Market Until Sale 0 0 -- 0 0 --
+Median Sales Price* $0 $0 -- $0 $0 --
+Percent of List Price Received* 0.0% 0.0% -- 0.0% 0.0% --
+Inventory of Homes for Sale 0 0 -- -- -- --
+Months Supply of Inventory 0.0 0.0 -- -- -- --
+* Does not account for sale concessions and/or downpayment assistance.  |  Percent changes are calculated using rounded figures and can sometimes look extreme due to small sample size.Year to DateTownhouse-Condo April
+Adult Community AprilYear to Date
+Current as of May 20, 2023. All data from the multiple listing services in the state of New Jersey. Margin of error for reported statewide numbers is +/– 4% at a 95% confidence level. Report © 2023 ShowingTime.Local Market Update for April 2023
+Provided by New Jersey REALTORS®
+Camden City
+Camden County
+April Year to Date Single Family
+$0$25,000$50,000$75,000$100,000$125,000$150,000$175,000
+1-2010 1-2011 1-2012 1-2013 1-2014 1-2015 1-2016 1-2017 1-2018 1-2019 1-2020 1-2021 1-2022 1-2023Historical Median Sales Price by Property Type By Month
+Single Family Townhouse-Condo Adult Community
+
+Old Request Code:
+try:
+    new_filename = " ".join(['Camden', 'April', '2023']) + ".pdf"
+    url_parse = urlparse('https://www.njrealtor.com/login/?rd=10&passedURL=/goto/10k/')
+    with req.urlopen('https://www.njrealtor.com/login/?rd=10&passedURL=/goto/10k/') as response:
+        print(response.headers)
+        print(response.info())
+    #local_filename, headers = req.urlretrieve('http://njar.stats.10kresearch.com/docs/lmu/x/CamdenCity?src=page', 'C:\\Users\\Omar\\AppData\\Local\\Temp\\temp.html')
+    #starter = req.Request('https://fred.stlouisfed.org/graph/fredgraph.pdf?hires=1&type=application/pdf&bgcolor=%23e1e9f0&chart_type=line&drp=0&fo=open%20sans&graph_bgcolor=%23ffffff&height=450&mode=fred&recession_bars=on&txtcolor=%23444444&ts=12&tts=12&width=1168&nt=0&thu=0&trc=0&show_legend=yes&show_axis_titles=yes&show_tooltip=yes&id=CPIAUCSL,CPILFESL&scale=left,left&cosd=1964-08-01,1964-08-01&coed=2023-04-01,2023-04-01&line_color=%234572a7,%23aa4643&link_values=false,false&line_style=solid,solid&mark_type=none,none&mw=2,2&lw=2,2&ost=-99999,-99999&oet=99999,99999&mma=0,0&fml=a,a&fq=Monthly,Monthly&fam=avg,avg&fgst=lin,lin&fgsnd=2009-06-01,2009-06-01&line_index=1,2&transformation=pc1,pc1&vintage_date=2023-06-12,2023-06-12&revision_date=2023-06-12,2023-06-12&nd=1947-01-01,1957-01-01',headers=headers)
+    #with open(local_filename, 'rb') as reader, open(new_filename, 'wb') as writer:
+    #with req.urlopen(starter) as reader, open(new_filename, 'wb') as writer:
+        #target_html = reader.readlines()
+        #for item in target_html:
+            #writer.write(item)
+            #logger.info(f'The data for {town} {year} Has Been Successfully Downloaded')
+except IOError as e:
+    print(f'{e}')
+    #logger.exception("IOError Occured: ", strerror(e.errno))
+
+
+
