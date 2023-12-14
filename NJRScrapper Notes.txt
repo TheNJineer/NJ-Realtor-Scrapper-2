@@ -1,19 +1,27 @@
 PRIORITY:
-
+******I need to subscribe to CJMLS and Bright MLS for all municipal sales data
+117) ******NJScrapper isn't currently getting data for Union Twp, NJ (Union County) or Union Twp, NJ (Hunterdon County)
+    - Change the if '/' in town logic in extract_pdf. Thats why pdfs arent getting downloaded. Add 'elif town.split('/')[0] != check_city'
+    - Remove the coding block from 801 - 811 from each if/elif block to make the code much cleaner
+115) pandas2excel no longer uploads separate dbs by year, just an all months and all years db
+71) Function that sends the data to an SQL Database
+116) ***Learn to use Pandas to create Pivot tables. Only use Excel to store the Pivot Table, All Years and All Months
+    - Store All Years and All Months in Excel until stored in PostgreSQL
+118) Refactor njr10k, update_njr10k, good_data
 112) Refactor matplot_lines(filename, **kwargs) to create a figure for each city and will house
  the axes for the 5 categories from 2019. Will no longer create separate charts for current year
     - Fix the dates format on the axis (DONE)
     - Change the colors of the plot lines for each year
     - Plot the average of each category on the same plot in a black line (DONE)
 113) Create a matplotlib chart formatter function to make main function less cluttered (DONE)
-******NJScrapper isn't currently getting data for Union Twp, NJ (Union County) or Union Twp, NJ (Hunterdon County)
+114) Function that stores all created matplotlib PDFs to an No-SQL Database
 106) Create an nj10k function which can take the city, county and **kwargs for args and download/extract pdfs
-    - Create function which updates main_dictionary and full_year for missing data
-    - Needed for when I need to download pdfs for one city or cities in particular
-    - city arg can be a str or list object. Change code based on what the type is
-    *** Reload the dictionary using the shelve model
-    *** Refactor the pdf_generator code to find the files I want to download
-    *** Run thorugh pdf_extractor
+    - Create function which updates main_dictionary and full_year for missing data (DONE)
+    - Needed for when I need to download pdfs for one city or cities in particular (DONE)
+    - city arg can be a str or list object. Change code based on what the type is (DONE)
+    *** Reload the dictionary using the shelve model (DONE)
+    *** Refactor the pdf_generator code to find the files I want to download (DONE)
+    *** Run thorugh pdf_extractor (DONE)
     *** Resave the dictionares in the shelve models
 109) Add doc-strings to all the methods of the class
 92) Create a method call quarterly_stats that runs the matplot_lines and njr10k_stats/njr10k_update_stats,
@@ -32,8 +40,6 @@ ________________________________________________________________________________
     - Load the latest file from the Real Estate Data directory and turn the 'All Months ' and 'All Years' tabs into dictionaries
     - Load new data in to the main_dictionary and full_year dict then concatenate them to the 'All Months ' and 'All Years' tabs
     - Update the pandas2excel method to account for changes
-71) Function that sends the data to an SQL Database
-114) Function that stores all created matplotlib PDFs to an No-SQL Database
 72) ***Look into aiohttp for async http requesting
 - asyncio is pretty difficult to use
 - there's something about the async setup that mixing up the split function for the cities with duplicate names

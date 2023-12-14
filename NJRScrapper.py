@@ -729,17 +729,16 @@ class Scraper:
     # Function which extracts the month, current and previous year, new listing, closing sales, DOM, median sales, etc
     # Data will then be stored in a dictionary
     @logger_decorator
-    def extract_re_data(self, pdfname, possible_corrupted_list, **kwargs):
+    def extract_re_data(self, pdfname, possible_corrupted_list, update=None, **kwargs):
         """
         Function which reads the pdfname name arg and extracts the real estate data from that pdf and stores
         it in the global main_dictionary variable
         :param pdfname: Name of the target pdf
         :param possible_corrupted_list: list variable which stores the name of possibly corrupted files
+        :param update: Allows for dynamic directory changing if argument is equal to 'Yes'
         :param kwargs: Keyword argument dictionary which houses the logger function variables
         :return: None
         """
-
-        os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder')
 
         logger = kwargs['logger']
         f_handler = kwargs['f_handler']
@@ -748,6 +747,7 @@ class Scraper:
         # Information will be used in data_na function
         info = pdfname.rstrip('.pdf').split(' ')
         town = info[0:len(info) - 2]
+        town_directory = info[0:len(info) - 2]
         if len(town) > 2:
             if 'County' in town:
                 # This means the city name is a duplicate and needs to have the county distinguished
@@ -770,6 +770,10 @@ class Scraper:
             logger.removeHandler(c_handler)
             logging.shutdown()
         else:
+            if update == 'Yes':
+                os.chdir(f'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files\\{year1}\\{" ".join(town_directory)}')
+            else:
+                os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder')
             try:
                 with open(pdfname, 'rb') as reader:
                     pdfread = PyPDF2.PdfReader(reader)
@@ -897,6 +901,29 @@ class Scraper:
                 logger.removeHandler(f_handler)
                 logger.removeHandler(c_handler)
                 logging.shutdown()
+
+    @logger_decorator
+    def fill_missing_data(self, target_directories: list, **kwargs):
+
+        logger = kwargs['logger']
+        f_handler = kwargs['f_handler']
+        c_handler = kwargs['c_handler']
+
+        name = "Fill Missing Data"
+        start_time = datetime.datetime.now()
+
+        for pdf in Scraper.pdf_generator(pdfname=target_directories):
+            self.extract_re_data(pdf, ['No Corrupted Files'], update='Yes')
+
+        end_time = datetime.datetime.now()
+        run_time = end_time - start_time
+
+        self.event_log_update(name, run_time, logger)
+        winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
+
+        logger.removeHandler(f_handler)
+        logger.removeHandler(c_handler)
+        logging.shutdown()
 
     @classmethod
     def find_county(cls, city):
@@ -1794,6 +1821,7 @@ class Scraper:
         # Variable pdfname will either be a string argument or None
         pdfname = pdfname
         filenames = os.listdir(base_path)
+        base_dir = os.getcwd()
         # for filenames in os.listdir(base_path):
         if pdfname is None:
             # If pdfname is None, the generator starts at the beginning of the list
@@ -1802,24 +1830,28 @@ class Scraper:
                     yield filename
                 else:
                     continue
-        elif pdfname.endswith('.pdf'):
-            # If pdfname is a string and ends with '.pdf', an error occurred in the extract_re_data function
-            # The program will truncate the filesnames list starting with the first file name after the error
-            filenames = filenames[filenames.index(pdfname) + 1:]
+
+        elif type(pdfname) is list:
+            filenames = []
+            years = ['2019', '2020', '2021', '2022', '2023']
+            for year in years:
+                for municipality in pdfname:
+                    search_directory = f'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files\\{year}\\{municipality}'
+                    # os.chdir(search_directory)
+                    missing_files = os.listdir(search_directory)
+                    filenames.extend(missing_files)
+
+            os.chdir(base_path)
             for filename in filenames:
                 if filename.endswith('.pdf'):
                     yield filename
                 else:
                     continue
 
-        elif type(pdfname) is dict:
-            filenames = []
-            for year in pdfname['year']:
-                for pair in pdfname['pairs']:
-                    search_directory = f'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\{year}\\{pair[1]}\\{pair[0]}'
-                    missing_files = os.listdir(search_directory)
-                    filenames.extend(missing_files)
-
+        elif pdfname.endswith('.pdf'):
+            # If pdfname is a string and ends with '.pdf', an error occurred in the extract_re_data function
+            # The program will truncate the filesnames list starting with the first file name after the error
+            filenames = filenames[filenames.index(pdfname) + 1:]
             for filename in filenames:
                 if filename.endswith('.pdf'):
                     yield filename
@@ -2245,16 +2277,16 @@ if __name__ == '__main__':
     while True:
         try:
             obj = Scraper()
-            doc = 'F:\\Real Estate Investing\\JQH Holding Company LLC\\Real Estate Data\\NJ 10k Real Estate Data 2023-09-29.xlsx'
-            obj.cloropleth_maps_state(doc)
+            # doc = 'F:\\Real Estate Investing\\JQH Holding Company LLC\\Real Estate Data\\NJ 10k Real Estate Data 2023-09-29.xlsx'
+            # obj.cloropleth_maps_state(doc)
             # obj.matplot_lines(doc)
-            # results = obj.main()
-            #
-            # if results == 'RESTART':
-            #     continue
-            # else:
-            #     # run_quarterly_analysis(results)
-            #     pass
+            results = obj.main()
+
+            if results == 'RESTART':
+                continue
+            else:
+                pass
+            # run_quarterly_analysis(results)
         except KeyboardInterrupt:
             print()
             print('Program was manually stopped')
