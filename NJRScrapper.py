@@ -6,6 +6,7 @@ import PyPDF2
 import shutil
 import shelve
 import datetime
+import traceback
 from datetime import date
 from datetime import timedelta
 import geopandas
@@ -172,14 +173,16 @@ class Scraper:
 
                 for k,v in quarterly_dict.items():
 
-                    run_date = datetime.datetime.strptime(quarterly_dict[k]['Run Date'] + ' ' + str(current_year), "%B %d %Y")
+                    run_date = datetime.datetime.strptime(quarterly_dict[k]['Run Date'] + ' ' + str(current_year),
+                                                          "%B %d %Y")
                     if todaysdate == run_date:
                         results = original_function(*args, **kwargs)
                     elif date != run_date:
                         continue
                     else:
                         for k1,v1 in quarterly_dict.items():
-                            if todaysdate > datetime.datetime.strptime(quarterly_dict[k1]['Run Date'] + ' ' + str(current_year), "%B %d %Y"):
+                            if todaysdate > datetime.datetime.strptime(quarterly_dict[k1]['Run Date'] + ' '
+                                                                       + str(current_year), "%B %d %Y"):
                                 continue
                             else:
                                 results = f"The next quarterly statistics run will be for {k1} on {quarterly_dict[k1]['Run Date']}"
@@ -221,6 +224,20 @@ class Scraper:
                         self.__counties.append(newobj)
                 else:
                     self.__towns.append(newobj)
+
+    def check_county(self, pdf_text, town):
+        if '(' in pdf_text:
+            county = pdf_text.split('(')[0].strip()
+            if county in self.__counties:
+                real_county = county
+        elif '(' not in pdf_text:
+            county = pdf_text.strip()
+            if county in self.__counties:
+                real_county = county
+            else:
+                real_county = Scraper.find_county(town)
+
+        return real_county
 
     @classmethod
     def check_results(cls):
@@ -372,8 +389,7 @@ class Scraper:
 
                 try:
                     for k, v in corrupt_dict.items():
-                        city0 = v[0].split(' ')
-                        city = ''.join(city0)
+
                         # Redundant checker if a 2019 file has slipped through the first check
                         if v[2] == '2019':
                             continue
@@ -382,27 +398,11 @@ class Scraper:
                         for k1, v1 in self.__months.items():
                             if v[1] in v1:
                                 m = k1
-                        if '/' not in city:
-                            url3 = base_url + y + '-' + m + '/x/' + city
-                            new_filename = " ".join([' '.join(city0), self.__months[m], y]) + ".pdf"
 
-                        elif '/' in city:
-                            city = '%2F'.join(city.split('/'))
-                            del city0[city0.index('/')]
-                            url3 = base_url + y + '-' + m + '/x/' + city
-                            new_filename = " ".join([' '.join(city0), self.__months[m], y]) + ".pdf"
+                        url3, new_filename = self.create_url_and_pdfname(base_url, y, m, v[0])
 
-                        with session.get(url3, params=params, stream=True) as reader, open(new_filename, 'wb') as writer:
-                            for chunk in reader.iter_content(chunk_size=1000000):
-                                # Casting the bytes into a str type
-                                # and slicing the first 20 characters to check if 'PDF' is in
-                                check_pdf = str(chunk)[:20]
-                                # print(check_pdf)
-                                if 'PDF' in check_pdf:
-                                    writer.write(chunk)
-                                else:
-                                    logger.warning(f'WARNING! {new_filename} is possibly a corrupted file')
-                                    possible_corrupted_files.append(new_filename)
+                        Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
+                                             logger)
 
                 except IOError:
                     """An OS Error has occurred """
@@ -461,18 +461,18 @@ class Scraper:
         file available with event log history, a new event log dictionary is created.
         :return: None
         """
-        save_path = 'F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data\\NJ Scrapper Data Dictionary.dat'
+        save_path = 'F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data\\NJ Scrapper Data Dictionary_v2.dat'
         if os.path.exists(save_path):
             os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
             try:
-                with shelve.open('NJ Scrapper Data Dictionary', writeback=True) as saved_data_file:
+                with shelve.open('NJ Scrapper Data Dictionary_v2', writeback=True) as saved_data_file:
                     if saved_data_file['Event Log']:
                         cls.event_log = saved_data_file['Event Log']
                         runs_list = [i for i in cls.event_log.keys()]
                         Scraper.duplicate_eventlog_check()
                         cls.no_of_runs = runs_list[-1] + 1
 
-                    os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder')
+                os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder')
 
             except KeyError:
                 os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder')
@@ -482,6 +482,24 @@ class Scraper:
 
                     for kn in key_names:
                         cls.event_log[cls.no_of_runs].setdefault(kn, '')
+
+    def create_url_and_pdfname(self, base_url, year_var, month_var, town_var):
+
+        city_list = town_var.split(' ')
+        merged_city_name = ''.join(city_list)
+
+        if '/' not in city_list:
+
+            new_url = base_url + year_var + '-' + month_var + '/x/' + merged_city_name
+            new_filename = " ".join([' '.join(city_list), self.__months[month_var], year_var]) + ".pdf"
+
+        elif '/' in city_list:
+            merged_city_name = '%2F'.join(merged_city_name.split('/'))
+            del city_list[city_list.index('/')]
+            new_url = base_url + year_var + '-' + month_var + '/x/' + merged_city_name
+            new_filename = " ".join([' '.join(city_list), self.__months[month_var], year_var]) + ".pdf"
+
+        return new_url, new_filename
 
     @staticmethod
     @logger_decorator
@@ -550,13 +568,15 @@ class Scraper:
 
     # Creates the initial dictionary the scraped city data will be stored
     @staticmethod
-    def data_na(town, month, year):
+    def data_na(town, month, year, main_dict, year_dict):
         """
         Staticmethod which assigns default values of 0, 0.0 and N/A to variables used in the extraction function
         for real estate pdfs which were found to have corrupted data
         :param town: str variable of the name of the town
         :param month: str variable of the month of the target data
         :param year: str variable of the year of the target data
+        :param main_dict:
+        :param year_dict:
         :return: None
         """
 
@@ -572,9 +592,9 @@ class Scraper:
         closed_sales_fy = 0
         closed_sales_per_change = 0.0
         closed_sales_per_change_fy = 0.0
-        DOM_current = 0
+        dom_current = 0
         dom_fy = 0
-        DOM_per_change = 0.0
+        dom_per_change = 0.0
         dom_per_change_fy = 0.0
         median_sales_fy = 0
         median_sales_current = 0
@@ -604,7 +624,7 @@ class Scraper:
 
         variable_list = [city, county, quarter, month, current_year, new_listings_current, new_listings_per_change,
                          closed_sales_current,
-                         closed_sales_per_change, DOM_current, DOM_per_change, median_sales_current,
+                         closed_sales_per_change, dom_current, dom_per_change, median_sales_current,
                          median_sales_per_change, percent_lpr_current, percent_lpr_per_change,
                          inventory_current, inventory_per_change, supply_current, supply_per_change]
 
@@ -613,23 +633,24 @@ class Scraper:
                             median_sales_per_change_fy, percent_lpr_fy, percent_lpr_per_change_fy,
                             inventory_fy, inventory_per_change_fy, supply_fy, supply_per_change_fy]
 
-        if main_dictionary[current_year] == {}:
+        if main_dict[current_year] == {}:
             for idx, n in enumerate(category_list):
-                main_dictionary[current_year].setdefault(n, [])
-                main_dictionary[current_year][n].append(variable_list[idx])
+                main_dict[current_year].setdefault(n, [])
+                main_dict[current_year][n].append(variable_list[idx])
         else:
             for idx, n in enumerate(category_list):
-                main_dictionary[current_year][n].append(variable_list[idx])
+                main_dict[current_year][n].append(variable_list[idx])
         if month == 'December':
             category_list1 = category_list[:]
             del category_list1[2]
-            if full_year[current_year] == {}:
+
+            if year_dict[current_year] == {}:
                 for idx, n in enumerate(category_list1):
-                    full_year[current_year].setdefault(n, [])
-                    full_year[current_year][n].append(fy_variable_list[idx])
+                    year_dict[current_year].setdefault(n, [])
+                    year_dict[current_year][n].append(fy_variable_list[idx])
             else:
                 for idx, n in enumerate(category_list1):
-                    full_year[current_year][n].append(fy_variable_list[idx])
+                    year_dict[current_year][n].append(fy_variable_list[idx])
 
     # Function which calculates the difference between the current download date and previous date
     # Use this to calculate the average amount of time it takes between new update periods
@@ -648,32 +669,48 @@ class Scraper:
 
         return delta.days
 
+    @staticmethod
+    def download_pdf(session_var, pdf_url, params_dict, pdf_name, corrupted_files_list, logger):
+
+        with session_var.get(pdf_url, params=params_dict, stream=True) as reader, open(pdf_name, 'wb') as writer:
+            for chunk in reader.iter_content(chunk_size=1000000):
+                # Casting the bytes into a str type
+                # and slicing the first 20 characters to check if 'PDF' is in
+                check_pdf = str(chunk)[:20]
+                # print(check_pdf)
+                if 'PDF' in check_pdf:
+                    writer.write(chunk)
+                else:
+                    logger.warning(f'WARNING! {pdf_name} is possibly a corrupted file')
+                    corrupted_files_list.append(pdf_name)
+
     # Functon which checks if there's a duplicate vector for the current input year
     # Don't need a try-except block because any errors will be caught by the outter method
     @staticmethod
-    def duplicate_vector_check(pdfname, current_vector, year):
+    def duplicate_vector_check(pdfname, current_vector, year, main_dict):
         """
         Staticmethod which checks the current data vector against each row of the real estate dictionary
         to be sure that no duplicate data is stored in the dictionary
         :param pdfname: Name of the target pdf
         :param current_vector: latest vector of data added to the real estate dictionary
         :param year: key value 'year' used to access the nested year dictionaries
+        :param main_dict
         :return: None
         """
-        i = len(main_dictionary[year]['City'])
+        i = len(main_dict[year]['City'])
         number = i - 1
         if number > 0:
             for r in range(number, 0, -1):
                 previous_vector = []
-                for k in main_dictionary[year].keys():
-                    previous_vector.append(main_dictionary[year][k][r])
+                for k in main_dict[year].keys():
+                    previous_vector.append(main_dict[year][k][r])
 
                 assert current_vector != previous_vector, f'Duplicate Error: {pdfname} & {previous_vector[0]} ' \
                                                           f'{previous_vector[3]} {previous_vector[4]}.pdf'
         else:
             previous_vector = []
-            for k in main_dictionary[year].keys():
-                previous_vector.append(main_dictionary[year][k][number])
+            for k in main_dict[year].keys():
+                previous_vector.append(main_dict[year][k][number])
 
             assert current_vector != previous_vector, f'Duplicate Error: {pdfname} & {previous_vector[0]} ' \
                                                       f'{previous_vector[3]} {previous_vector[4]}.pdf'
@@ -689,8 +726,8 @@ class Scraper:
         number = i - 1
         if number > 0:
             for r in range(number, 0, -1):
-                current_vector_data = cls.event_log[r]['Latest Available Data']
-                previous_vector_data = cls.event_log[r-1]['Latest Available Data']
+                current_vector_data = [cls.event_log[r]['Run Type'], cls.event_log[r]['Latest Available Data']]
+                previous_vector_data = [cls.event_log[r-1]['Run Type'], cls.event_log[r-1]['Latest Available Data']]
                 try:
                     assert current_vector_data != previous_vector_data
                 except AssertionError:
@@ -729,13 +766,15 @@ class Scraper:
     # Function which extracts the month, current and previous year, new listing, closing sales, DOM, median sales, etc
     # Data will then be stored in a dictionary
     @logger_decorator
-    def extract_re_data(self, pdfname, possible_corrupted_list, update=None, **kwargs):
+    def extract_re_data(self, pdfname, possible_corrupted_list, main_dict, year_dict, update=None, **kwargs):
         """
         Function which reads the pdfname name arg and extracts the real estate data from that pdf and stores
         it in the global main_dictionary variable
         :param pdfname: Name of the target pdf
         :param possible_corrupted_list: list variable which stores the name of possibly corrupted files
         :param update: Allows for dynamic directory changing if argument is equal to 'Yes'
+        :param main_dict:
+        :param year_dict:
         :param kwargs: Keyword argument dictionary which houses the logger function variables
         :return: None
         """
@@ -743,25 +782,11 @@ class Scraper:
         logger = kwargs['logger']
         f_handler = kwargs['f_handler']
         c_handler = kwargs['c_handler']
-        pdfname = pdfname
-        # Information will be used in data_na function
-        info = pdfname.rstrip('.pdf').split(' ')
-        town = info[0:len(info) - 2]
-        town_directory = info[0:len(info) - 2]
-        if len(town) > 2:
-            if 'County' in town:
-                # This means the city name is a duplicate and needs to have the county distinguished
-                # For example: ['Franklin', 'Twp', 'Gloucester', 'County']
-                # --------> ['Franklin', 'Twp', '/', 'Gloucester', 'County']
-                town.insert(town.index('County') - 1, '/')
-                town = ' '.join(town)
-            else:
-                town = ' '.join(town)
-        else:
-            town = ' '.join(town)
 
-        month1 = info[-2]
-        year1 = info[-1]
+        # For municipalities with the same name and located in multiple counties,
+        # the county name will be unpacked in the town var and needs to be extracted to use as an additional
+        # redundancy check
+        town_directory, month1, year1, *town = Scraper.parse_pdfname(pdfname)
 
         if pdfname in possible_corrupted_list:
             logger.info(f'PDF corrupted. The city of {town} for {month1} {year1} does not have data')
@@ -769,6 +794,7 @@ class Scraper:
             logger.removeHandler(f_handler)
             logger.removeHandler(c_handler)
             logging.shutdown()
+
         else:
             if update == 'Yes':
                 os.chdir(f'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files\\{year1}\\{" ".join(town_directory)}')
@@ -781,121 +807,63 @@ class Scraper:
                     target = page.extract_text()
                     lines = target.split('\n')
                     lines = lines[24:]
-                    check_city = lines[4]
-                    check_county = lines[5]
 
-                if '/' in town:
-                    if town.split('/')[0] == check_city:
-                        city = town
-                        if '(' in check_county:
-                            check_county = check_county.split('(')[0].strip()
-                            if check_county in self.__counties:
-                                county = check_county
-                        elif '(' not in check_county:
-                            check_county = check_county.strip()
-                            if check_county in self.__counties:
-                                county = check_county
-                            else:
-                                county = Scraper.find_county(city)
+                if type(town) is list:
+                    try:
+                        if town[0] == lines[2]:
+                            real_town = town[0]
+                            county = self.check_county(lines[3], real_town)
 
-                        outcome = Scraper.good_data(pdfname, target, city, county, month1, year1)
-                        if outcome is None:
-                            logger.info(f'The data for {pdfname} has been extracted')
-                        elif outcome[1] == 'ree':
-                            raise re.error(f'{outcome[0]}')
-                        elif outcome[1] == 'AE':
-                            logger.info(f'PDF corrupted. The city of {town} for {month1} {year1} does not have data')
-                            Scraper.data_na(town, month1, year1)
-                            raise AssertionError(f'{outcome[0]}')
-                        elif outcome[1] == 'E':
-                            raise Exception(f'{outcome[0]}')
+                        # If the town from the file name does not match the town name
+                        # found inside the file @ first known location, check the second location
+                        elif town[0] == lines[4]:
+                            real_town = town[0]
+                            county = self.check_county(lines[5], real_town)
 
-                # If the town from the file name matches the town name found inside the file @ first known location
-                elif town == check_city:
-                    city = town
-                    if '(' in check_county:
-                        check_county = check_county.split('(')[0].strip()
-                        if check_county in self.__counties:
-                            county = check_county
-                    elif '(' not in check_county:
-                        check_county = check_county.strip()
-                        if check_county in self.__counties:
-                            county = check_county
+                        # Check if any recognizable town name is found inside the target pdf location
                         else:
-                            county = Scraper.find_county(city)
+                            real_town, county = self.pdf_redundancy_check(lines, pdfname, month1, year1, logger)
 
-                    outcome = Scraper.good_data(pdfname, target, city, county, month1, year1)
-                    if outcome is None:
-                        logger.info(f'The data for {pdfname} has been extracted')
-                    elif outcome[1] == 'ree':
-                        raise re.error(f'{outcome[0]}')
-                    elif outcome[1] == 'AE':
-                        logger.info(f'PDF corrupted. The city of {town} for {month1} {year1} does not have data')
-                        Scraper.data_na(town, month1, year1)
-                        raise AssertionError(f'{outcome[0]}')
-                    elif outcome[1] == 'E':
-                        raise Exception(f'{outcome[0]}')
+                    except KeyError:
+                        logger.exception(f'***{real_town} of {town[1]} is not in the state dictionary.\n'
+                                         f'The program will use the county name supplied from the parsed_pdf function')
+                        county = town[1]
+                    finally:
+                        assert county == town[1], f'{pdfname} corrupted. County names does not match'
 
-                # Check if the town from the file name matches the town name found inside the file @ second known location
-                elif town != check_city:
-                    # Reoccurring alternate index locations of the city and county
-                    check_city = lines[2]
-                    check_county = lines[3]
-                    for i in self.__towns:
-                        if i != check_city and check_city != town:
-                            continue
-                        elif i == check_city and check_city != town:
-                            continue
-                        elif i != check_city and check_city == town:
-                            continue
-                        elif i == check_city and check_city == town:
-                            city = town
+                elif type(town) is not list:
+                    if town == lines[2]:
+                        real_town = town
+                        county = self.check_county(lines[3], real_town)
 
-                            if '(' in check_county:
-                                check_county = check_county.split('(')[0].strip()
-                                if check_county in self.__counties:
-                                    county = check_county
-                            elif '(' not in check_county:
-                                check_county = check_county.strip()
-                                if check_county in self.__counties:
-                                    county = check_county
-                                else:
-                                    county = Scraper.find_county(city)
+                    elif town == lines[4]:
+                        real_town = town
+                        county = self.check_county(lines[5], real_town)
 
-                            outcome = Scraper.good_data(pdfname, target, city, county, month1, year1)
-                            if outcome is None:
-                                logger.info(f'The data for {pdfname} has been extracted')
-                                break
-                            elif outcome[1] == 'ree':
-                                raise re.error(f'{outcome[0]}')
-                            elif outcome[1] == 'AE':
-                                logger.info(f'PDF corrupted. The city of {town} for {month1} {year1} does not have data')
-                                Scraper.data_na(town, month1, year1)
-                                raise AssertionError(f'{outcome[0]}')
-                            elif outcome[1] == 'E':
-                                raise Exception(f'{outcome[0]}')
+                    else:
+                        real_town, county = self.pdf_redundancy_check(lines, pdfname, month1, year1, logger)
 
-                        else:
-                            logger.info(f'PDF corrupted. The city of {town} for {month1} {year1} does not have data')
-                            Scraper.data_na(town, month1, year1)
-                            break
+                Scraper.good_data(pdfname, target, real_town, county, month1, year1, main_dict, year_dict)
+                logger.info(f'The data for {pdfname} has been extracted')
 
             except PyPDF2._reader.EmptyFileError as efe:
-                logger.exception(f'An Error Has Occured (File Possibly Corrupted):\n{efe}')
-                logger.info(f'The city of {town} for {month1} {year1} does not have data')
+                logger.exception(f'An Error Has Occured (File Possibly Corrupted):\n{traceback.format_exception(efe)}')
+                logger.info(f'The city of {real_town} for {month1} {year1} does not have data')
                 # If function encounters an empty/corrupted pdf,
                 # the data_na function will render all information available for that file equal to zero
                 # The generator will then pick up at the next pdf to continue extracting data
-                Scraper.data_na(town, month1, year1)
+                Scraper.data_na(real_town, month1, year1, main_dict, year_dict)
 
             except re.error as ree:
-                logger.exception(f'A Regex Error Has Occurred:\n{ree}')
+                logger.exception(f'A Regex Error Has Occurred:\n{traceback.format_exception(ree)}')
 
             except AssertionError as AE:
-                logger.exception(f'An AssertionError Has Occurred:\n{AE}')
+                logger.exception(f'An AssertionError Has Occurred:\n{traceback.format_exception(AE)}')
+                logger.info(f'PDF corrupted. The city of {real_town} for {month1} {year1} does not have data')
+                Scraper.data_na(real_town, month1, year1, main_dict, year_dict)
 
             except Exception as E:
-                logger.exception(f'An Unhandled Error Has Occurred:\n{E}')
+                logger.exception(f'An Unhandled Error Has Occurred:\n{traceback.format_exception(E)}')
 
             finally:
                 logger.removeHandler(f_handler)
@@ -903,7 +871,15 @@ class Scraper:
                 logging.shutdown()
 
     @logger_decorator
-    def fill_missing_data(self, target_directories: list, **kwargs):
+    def fill_missing_data(self, target_directories: list, main_dict, year_dict, **kwargs):
+        """
+
+        :param target_directories:
+        :param main_dict:
+        :param year_dict:
+        :param kwargs:
+        :return:
+        """
 
         logger = kwargs['logger']
         f_handler = kwargs['f_handler']
@@ -913,7 +889,7 @@ class Scraper:
         start_time = datetime.datetime.now()
 
         for pdf in Scraper.pdf_generator(pdfname=target_directories):
-            self.extract_re_data(pdf, ['No Corrupted Files'], update='Yes')
+            self.extract_re_data(pdf, ['No Corrupted Files'], main_dict,year_dict, update='Yes')
 
         end_time = datetime.datetime.now()
         run_time = end_time - start_time
@@ -925,6 +901,45 @@ class Scraper:
         logger.removeHandler(c_handler)
         logging.shutdown()
 
+    @staticmethod
+    def find_closed_sales(pdf_text, month_var=None):
+
+        variable_list = []
+
+        closed_sales_pattern = re.compile(
+            r'Closed\sSales\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
+        closed_sales_search = list(closed_sales_pattern.findall(pdf_text))
+        closed_sales_current = int(closed_sales_search[0][1])
+        closed_sales_pc = closed_sales_search[0][2].split(' ')
+        closed_sales_per_change = ''.join(closed_sales_pc).rstrip('%')
+        if '+' in closed_sales_per_change:
+            closed_sales_per_change.lstrip('+')
+            closed_sales_per_change = round(float(closed_sales_per_change) / 100, 3)
+        elif '--' in closed_sales_per_change:
+            closed_sales_per_change = 0.0
+        else:
+            closed_sales_per_change = round(float(closed_sales_per_change) / 100, 3)
+
+        variable_list.extend([closed_sales_current, closed_sales_per_change])
+
+        if month_var == 'December':
+
+            closed_sales_fy = int(closed_sales_search[0][4])
+            closed_sales_pc_fy = closed_sales_search[0][5].split(' ')
+            closed_sales_per_change_fy = ''.join(closed_sales_pc_fy).rstrip('%')
+            if '+' in closed_sales_per_change_fy:
+                closed_sales_per_change_fy.lstrip('+')
+                closed_sales_per_change_fy = float(closed_sales_per_change_fy) / 100
+            elif '--' in closed_sales_per_change_fy:
+                closed_sales_per_change_fy = 0.0
+            else:
+                closed_sales_per_change_fy = float(closed_sales_per_change_fy) / 100
+
+            variable_list.extend([closed_sales_fy, closed_sales_per_change_fy])
+
+        return variable_list
+
+
     @classmethod
     def find_county(cls, city):
         """
@@ -934,6 +949,261 @@ class Scraper:
         """
 
         return cls.state_dict.loc[city, 'County']
+
+    @staticmethod
+    def find_dom(pdf_text, month_var=None):
+
+        variable_list = []
+
+        dom_pattern = re.compile(
+            r'Days\son\sMarket\sUntil\sSale\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
+        dom_search = list(dom_pattern.findall(pdf_text))
+        dom_current = int(dom_search[0][1])
+        dom_pc = dom_search[0][2].split(' ')
+        dom_per_change = ''.join(dom_pc).rstrip('%')
+        if '+' in dom_per_change:
+            dom_per_change.lstrip('+')
+            dom_per_change = round(float(dom_per_change) / 100, 3)
+        elif '--' in dom_per_change:
+            dom_per_change = 0.0
+        else:
+            dom_per_change = round(float(dom_per_change) / 100, 3)
+
+        variable_list.extend([dom_current, dom_per_change])
+
+        if month_var == 'December':
+            dom_fy = int(dom_search[0][4])
+            dom_pc_fy = dom_search[0][5].split(' ')
+            dom_per_change_fy = ''.join(dom_pc_fy).rstrip('%')
+            if '+' in dom_per_change_fy:
+                dom_per_change_fy.lstrip('+')
+                dom_per_change_fy = float(dom_per_change_fy) / 100
+            elif '--' in dom_per_change_fy:
+                dom_per_change_fy = 0.0
+            else:
+                dom_per_change_fy = float(dom_per_change_fy) / 100
+
+            variable_list.extend([dom_fy, dom_per_change_fy])
+
+        return variable_list
+
+    @staticmethod
+    def find_inventory(pdf_text, month_var=None):
+
+        variable_list = []
+
+        inventory_pattern = re.compile(
+            r'Inventory\sof\sHomes\sfor\sSale\s(--|\d{0,3}?)\s(--|\d{0,3}?)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(--|\d{0,3}?)\s(--|\d{0,3}?)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
+        inventory_search = list(inventory_pattern.findall(pdf_text))
+        inventory_current = inventory_search[0][1]
+        if inventory_current != '--':
+            inventory_current = int(inventory_current)
+        inventory_pc = inventory_search[0][2].split(' ')
+        inventory_per_change = ''.join(inventory_pc).rstrip('%')
+        if '+' in inventory_per_change:
+            inventory_per_change.lstrip('+')
+            inventory_per_change = round(float(inventory_per_change) / 100, 3)
+        elif '--' in inventory_per_change:
+            inventory_per_change = 0.0
+        else:
+            inventory_per_change = round(float(inventory_per_change) / 100, 3)
+
+        variable_list.extend([inventory_current, inventory_per_change])
+
+        if month_var == 'December':
+
+            inventory_fy = inventory_search[0][4]
+            if inventory_fy == '--':
+                inventory_fy = 0.0
+            inventory_pc_fy = inventory_search[0][5].split(' ')
+            inventory_per_change_fy = ''.join(inventory_pc_fy).rstrip('%')
+            if '+' in inventory_per_change_fy:
+                inventory_per_change_fy.lstrip('+')
+                inventory_per_change_fy = float(inventory_per_change_fy) / 100
+            elif '--' in inventory_per_change_fy:
+                inventory_per_change_fy = 0.0
+            else:
+                inventory_per_change_fy = float(inventory_per_change_fy) / 100
+
+            variable_list.extend([inventory_fy, inventory_per_change_fy])
+
+        return variable_list
+
+    @staticmethod
+    def find_key_metrics(pdf_text):
+
+        key_metrics_basic_pattern = re.compile(
+            r'Key\sMetrics\s(\d{4})\s(\d{4})\sPercent\sChange\sThru\s\d{1,2}?-\d{4}\sThru\s\d{1,2}?-\d{4}\sPercent\sChange')
+        km_search = list(key_metrics_basic_pattern.findall(pdf_text))
+
+        return km_search[0][1]
+
+    @staticmethod
+    def find_median_sales(pdf_text, month_var=None):
+
+        variable_list = []
+
+        median_sales_pattern = re.compile(
+            r'Median\sSales\sPrice\*\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
+        median_sales_search = list(median_sales_pattern.findall(pdf_text))
+        median_sales_current = median_sales_search[0][1]
+        median_sales_current = int("".join(median_sales_current.split(',')).lstrip('$'))
+        median_sales_pc = median_sales_search[0][2].split(' ')
+        median_sales_per_change = ''.join(median_sales_pc).rstrip('%')
+        if '+' in median_sales_per_change:
+            median_sales_per_change.lstrip('+')
+            median_sales_per_change = round(float(median_sales_per_change) / 100, 3)
+        elif '--' in median_sales_per_change:
+            median_sales_per_change = 0.0
+        else:
+            median_sales_per_change = round(float(median_sales_per_change) / 100, 3)
+
+        variable_list.extend([median_sales_current, median_sales_per_change])
+
+        if month_var == 'December':
+
+            median_sales_fy = median_sales_search[0][4]
+            median_sales_fy = int("".join(median_sales_fy.split(',')).lstrip('$'))
+            median_sales_pc_fy = median_sales_search[0][5].split(' ')
+            median_sales_per_change_fy = ''.join(median_sales_pc_fy).rstrip('%')
+            if '+' in median_sales_per_change_fy:
+                median_sales_per_change_fy.lstrip('+')
+                median_sales_per_change_fy = float(median_sales_per_change_fy) / 100
+            elif '--' in median_sales_per_change_fy:
+                median_sales_per_change_fy = 0.0
+            else:
+                median_sales_per_change_fy = float(median_sales_per_change_fy) / 100
+
+            variable_list.extend([median_sales_fy, median_sales_per_change_fy])
+
+        return variable_list
+
+    @staticmethod
+    def find_month(pdf_text):
+
+        month_pattern = re.compile(
+            r'(January|February|March|April|May|June|July|August|September|October|November|December)\sYear\sto\sDate\sSingle\sFamily')
+
+        return month_pattern.search(pdf_text).group(1)
+
+    @staticmethod
+    def find_new_listings(pdf_text, month_var=None):
+
+        variable_list = []
+
+        new_listings_pattern = re.compile(
+            r'New\sListings\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
+        new_listing_search = list(new_listings_pattern.findall(pdf_text))
+        new_listings_current = int(new_listing_search[0][1])
+        new_listings_pc = str(new_listing_search[0][2]).split(' ')
+        new_listings_per_change = ''.join(new_listings_pc).rstrip('%')
+        if '+' in new_listings_per_change:
+            new_listings_per_change.lstrip('+')
+            new_listings_per_change = round(float(new_listings_per_change) / 100, 3)
+        elif '--' in new_listings_per_change:
+            new_listings_per_change = 0.0
+        else:
+            new_listings_per_change = round(float(new_listings_per_change) / 100, 3)
+
+        variable_list.extend([new_listings_current, new_listings_per_change])
+
+        if month_var == 'December':
+
+            new_listings_fy = int(new_listing_search[0][4])
+            new_listings_pc_fy = str(new_listing_search[0][5]).split(' ')
+            new_listings_per_change_fy = ''.join(new_listings_pc_fy).rstrip('%')
+            if '+' in new_listings_per_change_fy:
+                new_listings_per_change_fy.lstrip('+')
+                new_listings_per_change_fy = float(new_listings_per_change_fy) / 100
+            elif '--' in new_listings_per_change_fy:
+                new_listings_per_change_fy = 0.0
+            else:
+                new_listings_per_change_fy = float(new_listings_per_change_fy) / 100
+
+            variable_list.extend([new_listings_fy, new_listings_per_change_fy])
+
+        return variable_list
+
+    @staticmethod
+    def find_percent_lpr(pdf_text, month_var=None):
+
+        variable_list = []
+
+        percent_lpr_pattern = re.compile(
+            r'Percent\sof\sList\sPrice\sReceived\*\s(\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
+        percent_lpr_search = list(percent_lpr_pattern.findall(pdf_text))
+        # Divide this by 100 and figure out how to format these to show the percent sign
+        percent_lpr_current = float(percent_lpr_search[0][1].rstrip('%'))
+        percent_lpr_pc = percent_lpr_search[0][2].split(' ')
+        percent_lpr_per_change = ''.join(percent_lpr_pc).rstrip('%')
+        if '+' in percent_lpr_per_change:
+            percent_lpr_per_change.lstrip('+')
+            percent_lpr_per_change = round(float(percent_lpr_per_change) / 100, 3)
+        elif '--' in percent_lpr_per_change:
+            percent_lpr_per_change = 0.0
+        else:
+            percent_lpr_per_change = round(float(percent_lpr_per_change) / 100, 3)
+
+        variable_list.extend([percent_lpr_current, percent_lpr_per_change])
+
+        if month_var == 'December':
+
+            percent_lpr_fy = float(percent_lpr_search[0][4].rstrip('%'))
+            percent_lpr_pc_fy = percent_lpr_search[0][5].split(' ')
+            percent_lpr_per_change_fy = ''.join(percent_lpr_pc_fy).rstrip('%')
+            if '+' in percent_lpr_per_change_fy:
+                percent_lpr_per_change_fy.lstrip('+')
+                percent_lpr_per_change_fy = float(percent_lpr_per_change_fy) / 100
+            elif '--' in percent_lpr_per_change_fy:
+                percent_lpr_per_change_fy = 0.0
+            else:
+                percent_lpr_per_change_fy = float(percent_lpr_per_change_fy) / 100
+
+            variable_list.extend([percent_lpr_fy, percent_lpr_per_change_fy])
+
+        return variable_list
+
+    @staticmethod
+    def find_supply(pdf_text, month_var=None):
+
+        variable_list = []
+
+        supply_pattern = re.compile(
+            r'Months\sSupply\sof\sInventory\s(--|\d{1,2}?.\d{1})\s(--|\d{1,2}?.\d{1})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(--|\d{1,2}?.\d{1})\s(--|\d{1,2}?.\d{1})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
+        supply_search = list(supply_pattern.findall(pdf_text))
+        supply_current = supply_search[0][1]
+        if supply_current != '--':
+            supply_current = float(supply_current)
+        supply_pc = supply_search[0][2].split(' ')
+        supply_per_change = ''.join(supply_pc).rstrip('%')
+        if '+' in supply_per_change:
+            supply_per_change.lstrip('+')
+            supply_per_change = round(float(supply_per_change) / 100, 3)
+        elif '--' in supply_per_change:
+            supply_per_change = 0.0
+        else:
+            supply_per_change = round(float(supply_per_change) / 100, 3)
+
+        variable_list.extend([supply_current, supply_per_change])
+
+        if month_var == 'December':
+
+            supply_fy = supply_search[0][4]
+            if supply_fy == '--':
+                supply_fy = 0.0
+            supply_pc_fy = supply_search[0][5].split(' ')
+            supply_per_change_fy = ''.join(supply_pc_fy).rstrip('%')
+            if '+' in supply_per_change_fy:
+                supply_per_change_fy.lstrip('+')
+                supply_per_change_fy = float(supply_per_change_fy) / 100
+            elif '--' in supply_per_change_fy:
+                supply_per_change_fy = 0.0
+            else:
+                supply_per_change_fy = float(supply_per_change_fy) / 100
+
+            variable_list.extend([supply_fy, supply_per_change_fy])
+
+        return variable_list
 
     # Function which pulls the username and password for a specified website
     @staticmethod
@@ -959,7 +1229,7 @@ class Scraper:
         return username, pw
 
     @staticmethod
-    def good_data(pdfname, target, city, county, month1, year1):
+    def good_data(pdfname, target, city, county, month1, year1, main_dict, year_dict):
         """
 
         :param pdfname:
@@ -968,254 +1238,97 @@ class Scraper:
         :param county:
         :param month1:
         :param year1:
+        :param main_dict:
+        :param year_dict:
         :return:
         """
 
-        try:
-            month_pattern = re.compile(
-                r'(January|February|March|April|May|June|July|August|September|October|November|December)\sYear\sto\sDate\sSingle\sFamily')
-            month = month_pattern.search(target)
-            month = month.group(1)
-            quarter = Scraper.quarter(month)
-            key_metrics_basic_pattern = re.compile(
-                r'Key\sMetrics\s(\d{4})\s(\d{4})\sPercent\sChange\sThru\s\d{1,2}?-\d{4}\sThru\s\d{1,2}?-\d{4}\sPercent\sChange')
-            km_search = list(key_metrics_basic_pattern.findall(target))
-            current_year = km_search[0][1]
-            new_listings_pattern = re.compile(
-                r'New\sListings\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
-            new_listing_search = list(new_listings_pattern.findall(target))
-            new_listings_current = int(new_listing_search[0][1])
-            new_listings_pc = str(new_listing_search[0][2]).split(' ')
-            new_listings_per_change = ''.join(new_listings_pc).rstrip('%')
-            if '+' in new_listings_per_change:
-                new_listings_per_change.lstrip('+')
-                new_listings_per_change = round(float(new_listings_per_change) / 100, 3)
-            elif '--' in new_listings_per_change:
-                new_listings_per_change = 0.0
-            else:
-                new_listings_per_change = round(float(new_listings_per_change) / 100, 3)
-            closed_sales_pattern = re.compile(
-                r'Closed\sSales\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
-            closed_sales_search = list(closed_sales_pattern.findall(target))
-            closed_sales_current = int(closed_sales_search[0][1])
-            closed_sales_pc = closed_sales_search[0][2].split(' ')
-            closed_sales_per_change = ''.join(closed_sales_pc).rstrip('%')
-            if '+' in closed_sales_per_change:
-                closed_sales_per_change.lstrip('+')
-                closed_sales_per_change = round(float(closed_sales_per_change) / 100, 3)
-            elif '--' in closed_sales_per_change:
-                closed_sales_per_change = 0.0
-            else:
-                closed_sales_per_change = round(float(closed_sales_per_change) / 100, 3)
-            DOM_pattern = re.compile(
-                r'Days\son\sMarket\sUntil\sSale\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
-            DOM_search = list(DOM_pattern.findall(target))
-            DOM_current = int(DOM_search[0][1])
-            DOM_pc = DOM_search[0][2].split(' ')
-            DOM_per_change = ''.join(DOM_pc).rstrip('%')
-            if '+' in DOM_per_change:
-                DOM_per_change.lstrip('+')
-                DOM_per_change = round(float(DOM_per_change) / 100, 3)
-            elif '--' in DOM_per_change:
-                DOM_per_change = 0.0
-            else:
-                DOM_per_change = round(float(DOM_per_change) / 100, 3)
-            median_sales_pattern = re.compile(
-                r'Median\sSales\sPrice\*\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
-            median_sales_search = list(median_sales_pattern.findall(target))
-            median_sales_current = median_sales_search[0][1]
-            median_sales_current = int("".join(median_sales_current.split(',')).lstrip('$'))
-            median_sales_pc = median_sales_search[0][2].split(' ')
-            median_sales_per_change = ''.join(median_sales_pc).rstrip('%')
-            if '+' in median_sales_per_change:
-                median_sales_per_change.lstrip('+')
-                median_sales_per_change = round(float(median_sales_per_change) / 100, 3)
-            elif '--' in median_sales_per_change:
-                median_sales_per_change = 0.0
-            else:
-                median_sales_per_change = round(float(median_sales_per_change) / 100, 3)
-            percent_lpr_pattern = re.compile(
-                r'Percent\sof\sList\sPrice\sReceived\*\s(\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
-            percent_lpr_search = list(percent_lpr_pattern.findall(target))
-            # Divide this by 100 and figure out how to format these to show the percent sign
-            percent_lpr_current = float(percent_lpr_search[0][1].rstrip('%'))
-            percent_lpr_pc = percent_lpr_search[0][2].split(' ')
-            percent_lpr_per_change = ''.join(percent_lpr_pc).rstrip('%')
-            if '+' in percent_lpr_per_change:
-                percent_lpr_per_change.lstrip('+')
-                percent_lpr_per_change = round(float(percent_lpr_per_change) / 100, 3)
-            elif '--' in percent_lpr_per_change:
-                percent_lpr_per_change = 0.0
-            else:
-                percent_lpr_per_change = round(float(percent_lpr_per_change) / 100, 3)
-            inventory_pattern = re.compile(
-                r'Inventory\sof\sHomes\sfor\sSale\s(--|\d{0,3}?)\s(--|\d{0,3}?)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(--|\d{0,3}?)\s(--|\d{0,3}?)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
-            inventory_search = list(inventory_pattern.findall(target))
-            inventory_current = inventory_search[0][1]
-            if inventory_current != '--':
-                inventory_current = int(inventory_current)
-            inventory_pc = inventory_search[0][2].split(' ')
-            inventory_per_change = ''.join(inventory_pc).rstrip('%')
-            if '+' in inventory_per_change:
-                inventory_per_change.lstrip('+')
-                inventory_per_change = round(float(inventory_per_change) / 100, 3)
-            elif '--' in inventory_per_change:
-                inventory_per_change = 0.0
-            else:
-                inventory_per_change = round(float(inventory_per_change) / 100, 3)
-            supply_pattern = re.compile(
-                r'Months\sSupply\sof\sInventory\s(--|\d{1,2}?.\d{1})\s(--|\d{1,2}?.\d{1})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(--|\d{1,2}?.\d{1})\s(--|\d{1,2}?.\d{1})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
-            supply_search = list(supply_pattern.findall(target))
-            supply_current = supply_search[0][1]
-            if supply_current != '--':
-                supply_current = float(supply_current)
-            supply_pc = supply_search[0][2].split(' ')
-            supply_per_change = ''.join(supply_pc).rstrip('%')
-            if '+' in supply_per_change:
-                supply_per_change.lstrip('+')
-                supply_per_change = round(float(supply_per_change) / 100, 3)
-            elif '--' in supply_per_change:
-                supply_per_change = 0.0
-            else:
-                supply_per_change = round(float(supply_per_change) / 100, 3)
+        month = Scraper.find_month(target)
+        quarter = Scraper.quarter(month)
+        current_year = Scraper.find_key_metrics(target)
+        closed_sales_list = Scraper.find_closed_sales(target, month)
+        closed_sales_current = closed_sales_list[0]
+        closed_sales_per_change = closed_sales_list[1]
+        dom_list = Scraper.find_dom(target, month)
+        dom_current = dom_list[0]
+        dom_per_change = dom_list[1]
+        inventory_list = Scraper.find_inventory(target, month)
+        inventory_current = inventory_list[0]
+        inventory_per_change = inventory_list[1]
+        median_sales_list = Scraper.find_median_sales(target, month)
+        median_sales_current = median_sales_list[0]
+        median_sales_per_change = median_sales_list[1]
+        new_listings_list = Scraper.find_new_listings(target, month)
+        new_listings_current = new_listings_list[0]
+        new_listings_per_change = new_listings_list[1]
+        per_lpr_list = Scraper.find_percent_lpr(target, month)
+        percent_lpr_current = per_lpr_list[0]
+        percent_lpr_per_change = per_lpr_list[1]
+        supply_list = Scraper.find_supply(target, month)
+        supply_current = supply_list[0]
+        supply_per_change = supply_list[1]
 
-            category_list = ['City', 'County', 'Quarter', 'Month', 'Year', 'New Listings',
-                             'New Listing % Change (YoY)', 'Closed Sales',
-                             'Closed Sale % Change (YoY)', 'Days on Markets', 'Days on Market % Change (YoY)',
-                             'Median Sales Prices',
-                             'Median Sales Price % Change (YoY)', 'Percent of Listing Price Received',
-                             'Percent of Listing Price Receive % Change (YoY)', 'Inventory of Homes for Sales',
-                             'Inventory of Homes for Sale % Change (YoY)', 'Months of Supply',
-                             'Months of Supplies % Change (YoY)']
+        category_list = ['City', 'County', 'Quarter', 'Month', 'Year', 'New Listings',
+                         'New Listing % Change (YoY)', 'Closed Sales',
+                         'Closed Sale % Change (YoY)', 'Days on Markets', 'Days on Market % Change (YoY)',
+                         'Median Sales Prices',
+                         'Median Sales Price % Change (YoY)', 'Percent of Listing Price Received',
+                         'Percent of Listing Price Receive % Change (YoY)', 'Inventory of Homes for Sales',
+                         'Inventory of Homes for Sale % Change (YoY)', 'Months of Supply',
+                         'Months of Supplies % Change (YoY)']
 
-            variable_list = [city, county, quarter, month, current_year, new_listings_current,
-                             new_listings_per_change,
-                             closed_sales_current,
-                             closed_sales_per_change, DOM_current, DOM_per_change, median_sales_current,
-                             median_sales_per_change, percent_lpr_current, percent_lpr_per_change,
-                             inventory_current, inventory_per_change, supply_current, supply_per_change]
+        variable_list = [city, county, quarter, month, current_year, new_listings_current,
+                         new_listings_per_change, closed_sales_current,
+                         closed_sales_per_change, dom_current, dom_per_change, median_sales_current,
+                         median_sales_per_change, percent_lpr_current, percent_lpr_per_change,
+                         inventory_current, inventory_per_change, supply_current, supply_per_change]
 
-            # First check to see if the pdf contains the correct data
-            assert month == month1 and current_year == year1, f'{pdfname} is corrupted. ' \
-                                                              f'Giving data for {city} {month} {current_year}.pdf'
+        # First check to see if the pdf contains the correct data
+        assert month == month1 and current_year == year1, f'{pdfname} is corrupted. ' \
+                                                          f'Giving data for {city} {month} {current_year}.pdf'
 
-            if main_dictionary[current_year] == {}:
-                for idx, n in enumerate(category_list):
-                    main_dictionary[current_year].setdefault(n, [])
-                    main_dictionary[current_year][n].append(variable_list[idx])
-            else:
-                # Redundancy check to make sure there isn't any duplicate vectors in the database
-                Scraper.duplicate_vector_check(pdfname, variable_list, current_year)
-                for idx, n in enumerate(category_list):
-                    main_dictionary[current_year][n].append(variable_list[idx])
-
-            if month == 'December':
-                category_list1 = category_list[:]
-                del category_list1[2]
-                new_listings_fy = int(new_listing_search[0][4])
-                new_listings_pc_fy = str(new_listing_search[0][5]).split(' ')
-                new_listings_per_change_fy = ''.join(new_listings_pc_fy).rstrip('%')
-                if '+' in new_listings_per_change_fy:
-                    new_listings_per_change_fy.lstrip('+')
-                    new_listings_per_change_fy = float(new_listings_per_change_fy) / 100
-                elif '--' in new_listings_per_change_fy:
-                    new_listings_per_change_fy = 0.0
-                else:
-                    new_listings_per_change_fy = float(new_listings_per_change_fy) / 100
-
-                closed_sales_fy = int(closed_sales_search[0][4])
-                closed_sales_pc_fy = closed_sales_search[0][5].split(' ')
-                closed_sales_per_change_fy = ''.join(closed_sales_pc_fy).rstrip('%')
-                if '+' in closed_sales_per_change_fy:
-                    closed_sales_per_change_fy.lstrip('+')
-                    closed_sales_per_change_fy = float(closed_sales_per_change_fy) / 100
-                elif '--' in closed_sales_per_change_fy:
-                    closed_sales_per_change_fy = 0.0
-                else:
-                    closed_sales_per_change_fy = float(closed_sales_per_change_fy) / 100
-
-                dom_fy = int(DOM_search[0][4])
-                dom_pc_fy = DOM_search[0][5].split(' ')
-                dom_per_change_fy = ''.join(dom_pc_fy).rstrip('%')
-                if '+' in dom_per_change_fy:
-                    dom_per_change_fy.lstrip('+')
-                    dom_per_change_fy = float(dom_per_change_fy) / 100
-                elif '--' in dom_per_change_fy:
-                    dom_per_change_fy = 0.0
-                else:
-                    dom_per_change_fy = float(dom_per_change_fy) / 100
-
-                median_sales_fy = median_sales_search[0][4]
-                median_sales_fy = int("".join(median_sales_fy.split(',')).lstrip('$'))
-                median_sales_pc_fy = median_sales_search[0][5].split(' ')
-                median_sales_per_change_fy = ''.join(median_sales_pc_fy).rstrip('%')
-                if '+' in median_sales_per_change_fy:
-                    median_sales_per_change_fy.lstrip('+')
-                    median_sales_per_change_fy = float(median_sales_per_change_fy) / 100
-                elif '--' in median_sales_per_change_fy:
-                    median_sales_per_change_fy = 0.0
-                else:
-                    median_sales_per_change_fy = float(median_sales_per_change_fy) / 100
-
-                percent_lpr_fy = float(percent_lpr_search[0][4].rstrip('%'))
-                percent_lpr_pc_fy = percent_lpr_search[0][5].split(' ')
-                percent_lpr_per_change_fy = ''.join(percent_lpr_pc_fy).rstrip('%')
-                if '+' in percent_lpr_per_change_fy:
-                    percent_lpr_per_change_fy.lstrip('+')
-                    percent_lpr_per_change_fy = float(percent_lpr_per_change_fy) / 100
-                elif '--' in percent_lpr_per_change_fy:
-                    percent_lpr_per_change_fy = 0.0
-                else:
-                    percent_lpr_per_change_fy = float(percent_lpr_per_change_fy) / 100
-
-                inventory_fy = inventory_search[0][4]
-                if inventory_fy == '--':
-                    inventory_fy = 0.0
-                inventory_pc_fy = inventory_search[0][5].split(' ')
-                inventory_per_change_fy = ''.join(inventory_pc_fy).rstrip('%')
-                if '+' in inventory_per_change_fy:
-                    inventory_per_change_fy.lstrip('+')
-                    inventory_per_change_fy = float(inventory_per_change_fy) / 100
-                elif '--' in inventory_per_change_fy:
-                    inventory_per_change_fy = 0.0
-                else:
-                    inventory_per_change_fy = float(inventory_per_change_fy) / 100
-
-                supply_fy = supply_search[0][4]
-                if supply_fy == '--':
-                    supply_fy = 0.0
-                supply_pc_fy = supply_search[0][5].split(' ')
-                supply_per_change_fy = ''.join(supply_pc_fy).rstrip('%')
-                if '+' in supply_per_change_fy:
-                    supply_per_change_fy.lstrip('+')
-                    supply_per_change_fy = float(supply_per_change_fy) / 100
-                elif '--' in supply_per_change_fy:
-                    supply_per_change_fy = 0.0
-                else:
-                    supply_per_change_fy = float(supply_per_change_fy) / 100
-
-                fy_variable_list = [city, county, month, current_year, new_listings_fy,
-                                    new_listings_per_change_fy,
-                                    closed_sales_fy, closed_sales_per_change_fy, dom_fy, dom_per_change_fy,
-                                    median_sales_fy,
-                                    median_sales_per_change_fy, percent_lpr_fy, percent_lpr_per_change_fy,
-                                    inventory_fy, inventory_per_change_fy, supply_fy, supply_per_change_fy]
-
-                if full_year[current_year] == {}:
-                    for idx, n in enumerate(category_list1):
-                        full_year[current_year].setdefault(n, [])
-                        full_year[current_year][n].append(fy_variable_list[idx])
-                else:
-                    for idx, n in enumerate(category_list1):
-                        full_year[current_year][n].append(fy_variable_list[idx])
-        except re.error as ree:
-            return [ree, 'ree']
-        except AssertionError as AE:
-            return [AE, 'AE']
-        except Exception as E:
-            return [E, 'E']
+        if main_dict[current_year] == {}:
+            for idx, n in enumerate(category_list):
+                main_dict[current_year].setdefault(n, [])
+                main_dict[current_year][n].append(variable_list[idx])
         else:
-            return None
+            # Redundancy check to make sure there isn't any duplicate vectors in the database
+            Scraper.duplicate_vector_check(pdfname, variable_list, current_year, main_dict)
+            for idx, n in enumerate(category_list):
+                main_dict[current_year][n].append(variable_list[idx])
+
+        if month == 'December':
+            category_list1 = category_list[:]
+            del category_list1[2]
+
+            new_listings_fy = new_listings_list[2]
+            new_listings_per_change_fy = new_listings_list[3]
+            closed_sales_fy = closed_sales_list[2]
+            closed_sales_per_change_fy = closed_sales_list[3]
+            dom_fy = dom_list[2]
+            dom_per_change_fy = dom_list[3]
+            median_sales_fy = median_sales_list[2]
+            median_sales_per_change_fy = median_sales_list[3]
+            percent_lpr_fy = per_lpr_list[2]
+            percent_lpr_per_change_fy = per_lpr_list[3]
+            inventory_fy = inventory_list[2]
+            inventory_per_change_fy = inventory_list[3]
+            supply_fy = supply_list[2]
+            supply_per_change_fy = supply_list[3]
+
+            fy_variable_list = [city, county, month, current_year, new_listings_fy,
+                                new_listings_per_change_fy, closed_sales_fy, closed_sales_per_change_fy,
+                                dom_fy, dom_per_change_fy, median_sales_fy, median_sales_per_change_fy,
+                                percent_lpr_fy, percent_lpr_per_change_fy, inventory_fy,
+                                inventory_per_change_fy, supply_fy, supply_per_change_fy]
+
+            if year_dict[current_year] == {}:
+                for idx, n in enumerate(category_list1):
+                    year_dict[current_year].setdefault(n, [])
+                    year_dict[current_year][n].append(fy_variable_list[idx])
+            else:
+                for idx, n in enumerate(category_list1):
+                    year_dict[current_year][n].append(fy_variable_list[idx])
 
     # Used in case the njr10k or the update_njr10k functions are used recursively.
     # This function will find the latest file downloaded and continue from that point
@@ -1237,7 +1350,7 @@ class Scraper:
                         i -= 1
                     else:
                         target = filenames[i]
-                        # Files are stores in alphabetical order
+                        # Files are stored in alphabetical order
                         # Wyckoff Twp are the last pdfs to be downloaded
                         # If the target pdf name is either equal to Wyckoff Twp Sept for this year or last year
                         # or Wyckoff Twp of the current month and year
@@ -1246,7 +1359,7 @@ class Scraper:
                         check2 = 'Wyckoff Twp September ' + Scraper.current_data.split(' ')[1] + '.pdf'
                         check3 = 'Wyckoff Twp ' + Scraper.current_data + '.pdf'
                         if target == check1 or target == check2 or target == check3:
-                            print(f'Latest file downloaded is: {target}\nAll files maybe downloaded...')
+                            print(f'Latest file downloaded is: {target}\nAll files may be downloaded...')
                             time.sleep(1)
                             print(f'Moving 2nd phase check...')
                             time.sleep(1)
@@ -1279,6 +1392,7 @@ class Scraper:
         logger = kwargs['logger']
         f_handler = kwargs['f_handler']
         c_handler = kwargs['c_handler']
+
         by_qtr_stats = pd.read_excel(filename, sheet_name='All Months')
         # Need to use tolist() vs to_list() because the latter creates a numpy array first
         years = by_qtr_stats['Year'].unique().tolist()
@@ -1309,7 +1423,8 @@ class Scraper:
                         axs = plt.subplot(3, 2, idx1 + 1)
                         Scraper.nj10k_linechart_plotter(axs)
                         plt.plot(target_df['Dates'], target_df[column], label=city)
-                        plt.plot(target_df['Dates'], [target_df[column].mean() for _ in range(len(target_df['Dates']))], color='black', label=f'{len(years)} Year Avg')
+                        plt.plot(target_df['Dates'], [target_df[column].mean() for _ in range(len(target_df['Dates']))],
+                                 color='black', label=f'{len(years)} Year Avg')
                         plt.ylabel(column, fontsize='small')
 
                     plot, label = axs.get_legend_handles_labels()
@@ -1360,7 +1475,7 @@ class Scraper:
             url = 'https://www.njrealtor.com/login/?rd=10&passedURL=/goto/10k/'
             url2 = 'https://www.njrealtor.com/ramco-api/web-services/login_POST.php'
 
-            session.get(url) # Request to arrive at the log-in page
+            session.get(url)  # Request to arrive at the log-in page
             session.post(url2, data=payload1)  # Response object to logging into website
 
             # If this is a recursive run, towns_list will be a sliced list starting from the last run city
@@ -1377,8 +1492,7 @@ class Scraper:
                     # Takes the name of the city from the list and splits the string at the space,
                     # then joins the strings in the newly created list
                     # This is needed to use in the url3 variable to access the correct 10k pdfs
-                    city0 = i.split(' ')
-                    city = ''.join(city0)
+
                     for y in self.__years:
 
                         if y == '2019':
@@ -1387,27 +1501,10 @@ class Scraper:
                             months1 = months[8:13]
                             for m in months1:
 
-                                if '/' not in city:
-                                    url3 = base_url + y + '-' + m + '/x/' + city
-                                    new_filename = " ".join([' '.join(city0), self.__months[m], y]) + ".pdf"
+                                url3, new_filename = self.create_url_and_pdfname(base_url, y, m, i)
 
-                                elif '/' in city:
-                                    city = '%2F'.join(city.split('/'))
-                                    del city0[city0.index('/')]
-                                    url3 = base_url + y + '-' + m + '/x/' + city
-                                    new_filename = " ".join([' '.join(city0), self.__months[m], y]) + ".pdf"
-
-                                with session.get(url3, params=params, stream=True) as reader, open(new_filename, 'wb') as writer:
-                                    for chunk in reader.iter_content(chunk_size=1000000):
-                                        # Casting the bytes into a str type
-                                        # and slicing the first 20 characters to check if 'PDF' is in
-                                        check_pdf = str(chunk)[:20]
-                                        # print(check_pdf)
-                                        if 'PDF' in check_pdf:
-                                            writer.write(chunk)
-                                        else:
-                                            logger.warning(f'WARNING! {new_filename} is possibly a corrupted file')
-                                            possible_corrupted_files.append(new_filename)
+                                Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
+                                                     logger)
 
                         elif y == self.__years[-1]:
                             # If year is the latest year, months1 will equal a sliced list of the
@@ -1417,53 +1514,17 @@ class Scraper:
                                 if v == Scraper.current_data.split(' ')[0]:
                                     months1 = months[:months.index(k) + 1]
                             for m in months1:
+                                url3, new_filename = self.create_url_and_pdfname(base_url, y, m, i)
 
-                                if '/' not in city:
-                                    url3 = base_url + y + '-' + m + '/x/' + city
-                                    new_filename = " ".join([' '.join(city0), self.__months[m], y]) + ".pdf"
-
-                                elif '/' in city:
-                                    city = '%2F'.join(city.split('/'))
-                                    del city0[city0.index('/')]
-                                    url3 = base_url + y + '-' + m + '/x/' + city
-                                    new_filename = " ".join([' '.join(city0), self.__months[m], y]) + ".pdf"
-
-                                with session.get(url3, params=params, stream=True) as reader, open(new_filename, 'wb') as writer:
-                                    for chunk in reader.iter_content(chunk_size=1000000):
-                                        # Casting the bytes into a str type
-                                        # and slicing the first 20 characters to check if 'PDF' is in
-                                        check_pdf = str(chunk)[:20]
-                                        # print(check_pdf)
-                                        if 'PDF' in check_pdf:
-                                            writer.write(chunk)
-                                        else:
-                                            logger.warning(f'WARNING! {new_filename} is possibly a corrupted file')
-                                            possible_corrupted_files.append(new_filename)
+                                Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
+                                                     logger)
 
                         elif y != '2019':
                             for m in months:
+                                url3, new_filename = self.create_url_and_pdfname(base_url, y, m, i)
 
-                                if '/' not in city:
-                                    url3 = base_url + y + '-' + m + '/x/' + city
-                                    new_filename = " ".join([' '.join(city0), self.__months[m], y]) + ".pdf"
-
-                                elif '/' in city:
-                                    city = '%2F'.join(city.split('/'))
-                                    del city0[city0.index('/')]
-                                    url3 = base_url + y + '-' + m + '/x/' + city
-                                    new_filename = " ".join([' '.join(city0), self.__months[m], y]) + ".pdf"
-
-                                with session.get(url3, params=params, stream = True) as reader, open(new_filename, 'wb') as writer:
-                                    for chunk in reader.iter_content(chunk_size=1000000):
-                                        # Casting the bytes into a str type
-                                        # and slicing the first 20 characters to check if 'PDF' is in
-                                        check_pdf = str(chunk)[:20]
-                                        # print(check_pdf)
-                                        if 'PDF' in check_pdf:
-                                            writer.write(chunk)
-                                        else:
-                                            logger.warning(f'WARNING! {new_filename} is possibly a corrupted file')
-                                            possible_corrupted_files.append(new_filename)
+                                Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
+                                                     logger)
 
             except IOError:
                 """An OS Error has occurred """
@@ -1532,101 +1593,6 @@ class Scraper:
         axes_label.yaxis.set_minor_locator(ticker.AutoMinorLocator())
         axes_label.xaxis.set_major_formatter(mdates.DateFormatter('%y-%b'))
 
-    # @staticmethod
-    # @logger_decorator
-    # def njr10k_stats(excelfile, **kwargs):  # Try to use the absolute file path to not change the directory
-    #
-    #     logger = kwargs['logger']
-    #     f_handler = kwargs['f_handler']
-    #     c_handler = kwargs['c_handler']
-    #     filename = 'NJ 10k Real Estate Stats ' + str(datetime.datetime.today().date()) + '.xlsx'  # New file name where stats will be stored
-    #
-    #     temp_df = pd.read_excel(excelfile, sheet_name='All Months')
-    #
-    #     # Empty df which will hold descriptive statistics by quarter
-    #     by_qtr_stats = pd.DataFrame(columns=['City', 'County', 'Date', 'Quarter', 'Year', 'Total New Listings',
-    #                                              'New Listings (Median)', 'New Listings (StdDev)',
-    #                                              'Total Closed Sales', 'Closed Sales(Median)', 'Closed Sales(StdDev)',
-    #                                              'DoM (Median)', 'DoM(StdDev)', 'Sales Price(Median)',
-    #                                              'Sales Price(StdDev)', 'PoLPR(Median)', 'PoLPR(StdDev)',
-    #                                              'Inventory of Homes for Sale(Median)',
-    #                                              'Inventory of Homes for Sale(StdDev)',
-    #                                              'Monthly Supply(Median)', 'Monthly Supply(StdDev)'])
-    #
-    #     # Empty df which will hold descriptive statistics by for the YTD and previous years
-    #     ytd_stats = pd.DataFrame(columns=['City', 'County', 'Date', 'Year', 'Total New Listings', 'New Listings (Median)',
-    #                                       'New Listings (StdDev)',
-    #                                       'Total Closed Sales', 'Closed Sales(Median)', 'Closed Sales(StdDev)',
-    #                                       'DoM(Median)', 'DoM(StdDev)', 'Sales Price(Median)',
-    #                                       'Sales Price(StdDev)', 'PoLPR(Median)', 'PoLPR(StdDev)',
-    #                                       'Inventory of Homes for Sale(Median)', 'Inventory of Homes for Sale(StdDev)',
-    #                                       'Monthly Supply(Median)', 'Monthly Supply(StdDev)'])
-    #
-    #     # Copy these four columns from the original df to the new dfs
-    #     for i in ['City', 'County', 'Date', 'Year']:
-    #         by_qtr_stats[i] = temp_df[i]
-    #         ytd_stats[i] = temp_df[i]
-    #
-    #     # Add the 'Quarter' column from the original df to the by_qtr_stats df
-    #     by_qtr_stats['Quarter'] = temp_df['Quarter']
-    #
-    #     # Drop the duplicate quarters for each city in the by_qtr_stats df and duplicate cities in the ytd_stats df
-    #     by_qtr_stats.drop_duplicates(['City', 'Quarter', 'Year'])
-    #     ytd_stats.drop_duplicates('City')
-    #
-    #     # Create quarters, years, and city lists to use in a for loop
-    #     quarters = ['Q1', 'Q2', 'Q3', 'Q4']
-    #     years = temp_df['Year'].unique().to_list()
-    #     city_list = ytd_stats['City'].to_list()
-    #     temp_df_columns = temp_df.columns.to_list()
-    #     ytd_stats_columns = ytd_stats.columns.to_list()
-    #     by_qtr_stats_columns = by_qtr_stats.columns.to_list()
-    #
-    #     for city_name in city_list:
-    #         # This should be the columns from the temp_df. Some names don't match to new data frames. Figure out how to fix this
-    #         for column_name in temp_df_columns:
-    #             temp_df1 = temp_df[['City' == city_name]]
-    #             if column_name == 'New Listings':
-    #                 ytd_stats.at[city_name, 'Total New Listings'] = temp_df1[column_name].sum()
-    #                 ytd_stats.at[city_name, 'New Listings (Median)'] = round(temp_df1[column_name].median(), 3)
-    #                 ytd_stats.at[city_name, 'New Listings (StdDev)'] = round(temp_df1[column_name].std(), 3)
-    #
-    #             elif column_name == 'Closed Sales':
-    #                 ytd_stats.at[city_name, 'Total Closed Sales'] = temp_df1[column_name].sum()
-    #                 ytd_stats.at[city_name, 'Closed Sales(Median)'] = round(temp_df1[column_name].median(), 3)
-    #                 ytd_stats.at[city_name, 'Closed Sales(StdDev)'] = round(temp_df1[column_name].std(), 3)
-    #             elif column_name in ytd_stats_columns[ytd_stats_columns.index('DoM(Median)'):-1]:
-    #                 # Make sure the list is stopped at Monthly Supply(Median) or it will create an indexing error
-    #                 ytd_stats.at[city_name, ytd_stats_columns[ytd_stats_columns.index(column_name)]] = round(
-    #                     temp_df1[column_name].median(), 3)
-    #                 ytd_stats.at[city_name, ytd_stats_columns[ytd_stats_columns.index(column_name) + 1]] = round(
-    #                     temp_df1[column_name].std(), 3)
-    #
-    #             for q in quarters:
-    #                 # I'll need to create an exception for qtrs that aren't available yet
-    #                 temp_df2 = temp_df1[['Quarter' == q]]
-    #                 if column_name == 'New Listings':
-    #                     by_qtr_stats.at[city_name, 'Total New Listings'] = temp_df2[column_name].sum()
-    #                     by_qtr_stats.at[city_name, 'New Listings (Median)'] = round(temp_df1[column_name].median(), 3)
-    #                     by_qtr_stats.at[city_name, 'New Listings (StdDev)'] = round(temp_df1[column_name].std(), 3)
-    #                 elif column_name == 'Closed Sales':
-    #                     by_qtr_stats.at[city_name, 'Total Closed Sales'] = temp_df2[column_name].sum()
-    #                     by_qtr_stats.at[city_name, 'Closed Sales(Median)'] = round(temp_df1[column_name].median(), 3)
-    #                     by_qtr_stats.at[city_name, 'Closed Sales(StdDev)'] = round(temp_df1[column_name].std(), 3)
-    #                 elif column_name in by_qtr_stats_columns[by_qtr_stats_columns.index('DoM(Median)'):-1]:
-    #                     # Make sure the list is stopped at Monthly Supply(Median) or it will create an indexing error
-    #                     by_qtr_stats.at[city_name, by_qtr_stats_columns[by_qtr_stats_columns.index(column_name)]] = round(
-    #                         temp_df2[column_name].median(), 3)
-    #                     by_qtr_stats.at[city_name, by_qtr_stats_columns[by_qtr_stats_columns.index(column_name) + 1]] = round(
-    #                         temp_df2[column_name].std(), 3)
-    #
-    #     with pd.ExcelWriter(filename) as writer:
-    #         logger.info(f'Now creating Dataframes for {by_qtr_stats} and {ytd_stats}')
-    #         ytd_stats.to_excel(writer, sheet_name='Stats YTD', index_col='City')
-    #         by_qtr_stats.to_excel(writer, sheet_name='Stats By Qtr', index_col='City')
-    #
-    #     return filename
-
     # Function uses Selenium to webscrape the cities and counties from the njrealtor 10k website
     @logger_decorator
     def njrdata(self, **kwargs):
@@ -1662,7 +1628,7 @@ class Scraper:
             login.click()
 
             # Recognize the page element to know it's time to webscrape all the cities and counties
-            brand = WebDriverWait(driver, 5).until(
+            WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.XPATH, "//img[@class='brand']"))
             )
             page_results = driver.page_source
@@ -1792,9 +1758,9 @@ class Scraper:
                     df1 = pd.DataFrame(dict2[k])
                     logger.info(f'Yearly dataframe for {k} has been created')
                     list2.append(df1)
-                    df.to_excel(writer, sheet_name= k + ' By Month', index_label='City', merge_cells=False)
-                    df1.to_excel(writer, sheet_name= k + ' Full Year', index_label='City', merge_cells=False)
-                    logger.info(f'Both dataframes for {k} have been sent to the Excel file')
+                    # df.to_excel(writer, sheet_name= k + ' By Month', index_label='City', merge_cells=False)
+                    # df1.to_excel(writer, sheet_name= k + ' Full Year', index_label='City', merge_cells=False)
+                    # logger.info(f'Both dataframes for {k} have been sent to the Excel file')
 
             logger.info(f'Now joining all quarterly dataframes...')
             all_months = pd.concat(list1)
@@ -1812,6 +1778,32 @@ class Scraper:
         winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
 
         return filename
+
+    @staticmethod
+    def parse_pdfname(pdf_name):
+
+        info = pdf_name.rstrip('.pdf').split(' ')
+        town_directory = info[0:len(info) - 2]
+
+        if len(town_directory) > 2:
+            if 'County' in town_directory:
+                # This means the city name is a duplicate and needs to have the county distinguished
+                county = ' '.join(town_directory[-2:])
+                town = ' '.join(town_directory[0:(town_directory.index('County') - 1)])
+            else:
+                town = ' '.join(town_directory)
+        else:
+            town = ' '.join(town_directory)
+
+        month1 = info[-2]
+        year1 = info[-1]
+
+        if county:
+            parsed_results = (town_directory, month1, year1, town, county)
+        else:
+            parsed_results = (town_directory, month1, year1, town)
+
+        return parsed_results
 
     # Generator function which will be used in tandem with the extract_re_data function to put data into main dictionary
     @staticmethod
@@ -1857,6 +1849,42 @@ class Scraper:
                     yield filename
                 else:
                     continue
+
+    def pdf_redundancy_check(self, pdf_text, pdf_name, month_var, year_var, logger):
+
+        temp_town = None
+        temp_county = None
+
+        for i in self.__towns:
+            if i not in pdf_text:
+                continue
+            else:
+                temp_town = i
+
+        for k in self.__counties:
+            if k not in pdf_text:
+                continue
+            else:
+                temp_county = k
+
+        if temp_town or temp_county is None:
+            logger.info(f'{pdf_name} corrupted. Does not have reliable data')
+            Scraper.data_na(temp_town, month_var, year_var)
+            raise Exception(f'{pdf_name} corrupted')
+
+        elif os.path.exists(f'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\' +
+                            f'PDF Temp Files\\{year_var}\\{temp_town}'):
+            # This logic will need to be changed in the future because the Python Temp Folder directory
+            # gets zipped and moved at the end of the year. Need a permanent directory to check
+            town = temp_town
+            county = temp_county
+
+            return town, county
+
+        else:
+            logger.info(f'{pdf_name} corrupted. The city of {temp_town} for {month_var} {year_var} does not have data')
+            Scraper.data_na(temp_town, month_var, year_var)
+            raise Exception(f'{pdf_name} corrupted')
 
     @staticmethod
     def quarter(month):
@@ -1989,8 +2017,8 @@ class Scraper:
             url = 'https://www.njrealtor.com/login/?rd=10&passedURL=/goto/10k/'
             url2 = 'https://www.njrealtor.com/ramco-api/web-services/login_POST.php'
 
-            response = session.get(url)
-            r_post = session.post(url2, data=payload1)
+            session.get(url)
+            session.post(url2, data=payload1)
 
             start_month = start[0]
             start_year = start[1]
@@ -2000,12 +2028,14 @@ class Scraper:
             # Assures that I'll have the correct year range when I slice the self.__years list
             assert int(start_year) <= int(current_year), "Invalid Operation: Start Year is greater than Current Year"
 
-            # If the start_year and current year variables are the same, form a one-object list to iterate through consisting of the current_year
-            # Else, create a new year list which is the full range from the start year to current year by slicing self.__year
+            # If the start_year and current year variables are the same,
+            # form a one-object list to iterate through consisting of the current_year
+            # Else, create a new year list which is the full range
+            # from the start year to current year by slicing self.__year
             if start_year == current_year:
                 years = [current_year]
             else:
-                years = self.__years[self.__years.index(start_year) : self.__years.index(current_year) + 1]
+                years = self.__years[self.__years.index(start_year): self.__years.index(current_year) + 1]
 
             for k, v in self.__months.items():
                 if start_month == v:
@@ -2014,7 +2044,8 @@ class Scraper:
                 if current_month == v:
                     current_month1 = k
                     if os.path.exists('C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files\\'
-                                      + current_year + '\\Wyckoff Twp\\Wyckoff Twp ' + start_month + ' ' + current_year + '.pdf'):
+                                      + current_year + '\\Wyckoff Twp\\Wyckoff Twp ' + start_month + ' '
+                                      + current_year + '.pdf'):
                         start_month1 = current_month1
 
             # If this is a recursive run, towns_list will be a sliced list starting from the last run city
@@ -2025,92 +2056,31 @@ class Scraper:
             elif towns_list == 'Read Logger File':
                 return 'Read Logger File'
 
-            try:
-                for i in towns_list:
+            for i in towns_list:
 
-                    # Takes the name of the city from the list and splits the string at the space, then joins the strings in the newly created list
-                    # This is needed to use in the url3 variable to access the correct 10k pdfs
-                    city0 = i.split(' ')
-                    city = ''.join(i.split(' '))
-                    for y in years:
+                # Takes the name of the city from the list and splits the string at the space,
+                # then joins the strings in the newly created list
+                # This is needed to use in the url3 variable to access the correct 10k pdfs
 
-                        months1 = months[months.index(start_month1) : months.index(current_month1) + 1]
-                        for m in months1:
-                            if '/' not in city:
-                                url3 = base_url + y + '-' + m + '/x/' + city
-                                new_filename = " ".join([' '.join(city0), self.__months[m], y]) + ".pdf"
+                for y in years:
 
-                            elif '/' in city:
-                                city = '%2F'.join(city.split('/'))
-                                del city0[city0.index('/')]
-                                url3 = base_url + y + '-' + m + '/x/' + city
-                                new_filename = " ".join([' '.join(city0), self.__months[m], y]) + ".pdf"
+                    months1 = months[months.index(start_month1): months.index(current_month1) + 1]
+                    for m in months1:
 
-                            with session.get(url3, params=params, stream=True) as reader, open(new_filename,'wb') as writer:
-                                for chunk in reader.iter_content(chunk_size=1000000):
-                                    # Casting the bytes into a str type and slicing the first 20 characters to check if 'PDF' is in
-                                    check_pdf = str(chunk)[:20]
-                                    # print(check_pdf)
-                                    if 'PDF' in check_pdf:
-                                        writer.write(chunk)
-                                    else:
-                                        logger.warning(f'WARNING! {new_filename} is possibly a corrupted file')
-                                        possible_corrupted_files.append(new_filename)
+                        url3, new_filename = self.create_url_and_pdfname(base_url, y, m, i)
 
-            except AssertionError as AE:
-                # The program should not be allowed to continue should this error occur
-                logger.exception(f'An AssertionError Has Occured:\n{AE}')
+                        Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
+                                             logger)
 
-            except IOError:
-                """An OS Error has occurred """
-                logger.exception(f'IOError has Occurred')
-                self.update_njr10k(start, finish)
+            end_time = datetime.datetime.now()
+            run_time = end_time - start_time
 
-            except requests.exceptions.HTTPError as rht:
-                """An HTTP error occurred."""
-                logger.exception(f'An HTTP has Occurred: {rht}')
+            self.event_log_update(name, run_time, logger)
+            winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
 
-            except requests.exceptions.Timeout as ret:
-                """The request timed out.
-                Catching this error will catch both
-                :exc:`~requests.exceptions.ConnectTimeout` and
-                :exc:`~requests.exceptions.ReadTimeout` errors.
-                """
-                logger.exception(f'The Request Has Timed Out: {ret}')
-
-            except requests.exceptions.InvalidURL as rei:
-                """The URL provided was somehow invalid."""
-                logger.exception(f'The URL Provided Was Invalid: {rei}')
-
-            except requests.exceptions.RetryError as rer:
-                """Custom retries logic failed"""
-                logger.exception(f'Custom Retries Logic Failed: {rer}')
-
-            except requests.exceptions.StreamConsumedError as res:
-                """The content for this response was already consumed."""
-                logger.exception(f'The Content For This Response Was Already Consumed: {res}')
-
-            except requests.exceptions.ContentDecodingError as rec:
-                """Failed to decode response content."""
-                logger.exception(f'Failed to Decode Response Content: {rec}')
-
-            except requests.exceptions.ChunkedEncodingError as rece:
-                """The server declared chunked encoding but sent an invalid chunk."""
-                logger.exception(f'Invalid Chunk Encoding: {rece}')
-            except Exception as E:
-                logger.exception(f'An Error Has Occurred: Unhandled: {E}')
-
-            else:
-
-                end_time = datetime.datetime.now()
-                run_time = end_time - start_time
-
-                self.event_log_update(name, run_time, logger)
-                winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
-
-                logger.removeHandler(f_handler)
-                logger.removeHandler(c_handler)
-                logging.shutdown()
+            logger.removeHandler(f_handler)
+            logger.removeHandler(c_handler)
+            logging.shutdown()
 
         if len(possible_corrupted_files) > 0:
             return possible_corrupted_files
@@ -2143,7 +2113,8 @@ class Scraper:
 
             first_results = self.njr10k()
             # The NJR10k function will return a list if the pdfs found to be possibly corrupted
-            # If length of the list is created than 0, the program will trigger the next function to download corrupted data
+            # If length of the list is created than 0,
+            # the program will trigger the next function to download corrupted data
             if first_results == 'Read Logger File':
                 # Read latest logger file to get a list of the corrupted files
                 second_results = self.corrupted_files(self.read_logger(logger))
@@ -2155,7 +2126,7 @@ class Scraper:
             logger.info('Beginning PDF extraction...')
             time.sleep(1)
             for pdf in Scraper.pdf_generator():
-                self.extract_re_data(pdf, second_results)
+                self.extract_re_data(pdf, second_results, main_dict=main_dictionary, year_dict=full_year)
 
             winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
             logger.info('PDF extraction is now complete...')
@@ -2164,7 +2135,7 @@ class Scraper:
             # Use the Shelve module to save data for later use
             logger.info('Saving the data for Main Dictionary, Full Year and Event Log...')
             os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
-            with shelve.open('NJ Scrapper Data Dictionary') as saved_data_file:
+            with shelve.open('NJ Scrapper Data Dictionary_v3') as saved_data_file:
                 saved_data_file['Main Dictionary'] = main_dictionary
                 saved_data_file['Full Year'] = full_year
                 saved_data_file['Event Log'] = Scraper.event_log
@@ -2185,7 +2156,7 @@ class Scraper:
             old_dir = os.getcwd()
             # Use the Shelve module to save data for later use
             os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
-            with shelve.open('NJ Scrapper Data Dictionary') as saved_data_file:
+            with shelve.open('NJ Scrapper Data Dictionary_v2') as saved_data_file:
                 main_dictionary = saved_data_file['Main Dictionary']
                 full_year = saved_data_file['Full Year']
 
@@ -2193,14 +2164,14 @@ class Scraper:
             logger.info('Beginning PDF extraction...')
             time.sleep(1)
             for pdf in Scraper.pdf_generator():
-                self.extract_re_data(pdf, second_results)
+                self.extract_re_data(pdf, second_results, main_dict=main_dictionary, year_dict=full_year)
 
             winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
             logger.info('PDF extraction is now complete...')
 
             os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
             logger.info('Saving the data for Main Dictionary, Full Year and Event Log...')
-            with shelve.open('NJ Scrapper Data Dictionary', writeback=True) as saved_data_file:
+            with shelve.open('NJ Scrapper Data Dictionary_v2', writeback=True) as saved_data_file:
                 saved_data_file['Main Dictionary'] = main_dictionary
                 saved_data_file['Full Year'] = full_year
                 saved_data_file['Event Log'] = Scraper.event_log

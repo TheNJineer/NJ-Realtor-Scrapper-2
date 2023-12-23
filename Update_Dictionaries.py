@@ -2,6 +2,36 @@ from NJRScrapper import Scraper
 import os
 import time
 import shelve
+from pprint import pprint
+
+
+def main():
+
+    old_dir = os.getcwd()
+    # Use the Shelve module to save data for later use
+    os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
+    with shelve.open('NJ Scrapper Data Dictionary_v2') as saved_data_file:
+        main_dictionary = saved_data_file['Main Dictionary']
+        full_year = saved_data_file['Full Year']
+
+    os.chdir(old_dir)
+
+    obj = Scraper()
+    print('Beginning PDF extraction...')
+    time.sleep(1)
+    obj.fill_missing_data(update_list, main_dictionary, full_year)
+
+    os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
+    print('Saving the data for Main Dictionary, Full Year and Event Log...')
+    with shelve.open('NJ Scrapper Data Dictionary_v2', writeback=True) as saved_data_file:
+        saved_data_file['Main Dictionary'] = main_dictionary
+        saved_data_file['Full Year'] = full_year
+        saved_data_file['Event Log'] = Scraper.event_log
+        saved_data_file.sync()
+
+    print('All data has been saved...')
+    os.chdir(old_dir)
+
 
 update_list = ['Fairfield Twp Cumberland County', 'Fairfield Twp Essex County',
                       'Franklin Twp Gloucester County', 'Franklin Twp Hunterdon County',
@@ -19,47 +49,7 @@ update_list = ['Fairfield Twp Cumberland County', 'Fairfield Twp Essex County',
                       'Washington Twp Burlington County', 'Washington Twp Gloucester County',
                       'Washington Twp Morris County', 'Washington Twp Warren County']
 
+
 if __name__ == '__main__':
 
-    main_dictionary = {
-        '2018': {},
-        '2019': {},
-        '2020': {},
-        '2021': {},
-        '2022': {},
-        '2023': {}
-    }
-
-    full_year = {
-        '2018': {},
-        '2019': {},
-        '2020': {},
-        '2021': {},
-        '2022': {},
-        '2023': {}
-    }
-
-    old_dir = os.getcwd()
-    # Use the Shelve module to save data for later use
-    os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
-    with shelve.open('NJ Scrapper Data Dictionary') as saved_data_file:
-        main_dictionary = saved_data_file['Main Dictionary']
-        full_year = saved_data_file['Full Year']
-
-    os.chdir(old_dir)
-
-    obj = Scraper()
-    print('Beginning PDF extraction...')
-    time.sleep(1)
-    obj.fill_missing_data(update_list)
-
-    os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
-    print('Saving the data for Main Dictionary, Full Year and Event Log...')
-    with shelve.open('NJ Scrapper Data Dictionary_v2', writeback=True) as saved_data_file:
-        saved_data_file['Main Dictionary'] = main_dictionary
-        saved_data_file['Full Year'] = full_year
-        saved_data_file['Event Log'] = Scraper.event_log
-        saved_data_file.sync()
-
-    print('All data has been saved...')
-    os.chdir(old_dir)
+    main()
