@@ -9,14 +9,12 @@ import datetime
 import traceback
 from datetime import date
 from datetime import timedelta
+from sqlalchemy import create_engine
+import psycopg2
 import geopandas
 import logging
 import zipfile
 from send2trash import send2trash
-from matplotlib import pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
-import matplotlib.ticker as ticker
-import matplotlib.dates as mdates
 import requests
 import re
 import time
@@ -104,6 +102,13 @@ class Scraper:
 
     @staticmethod
     def run_main(original_function):
+        """
+        NOT NEEDED - DELETE
+        WILL BE RUN FROM A DIFFERENT SCRIPT USING AIRFLOW
+
+        :param original_function:
+        :return:
+        """
         def wrapper(*args, **kwargs):
 
             # Formulate all the date variables
@@ -158,6 +163,12 @@ class Scraper:
 
     @staticmethod
     def run_quarterly_statistics(todaysdate):
+        """
+        NOT NEEDED - DELETE
+
+        :param todaysdate:
+        :return:
+        """
         # I need to create some local variables here to keep runtimes in check
         quarterly_dict = {
             'Q1': {'Run Date': 'April 24'},
@@ -226,6 +237,12 @@ class Scraper:
                     self.__towns.append(newobj)
 
     def check_county(self, pdf_text, town):
+        """
+
+        :param pdf_text:
+        :param town:
+        :return:
+        """
         if '(' in pdf_text:
             county = pdf_text.split('(')[0].strip()
             if county in self.__counties:
@@ -260,7 +277,31 @@ class Scraper:
         return start, finish
 
     @staticmethod
+    def clean_db(database_object):
+        """
+
+        :param database_object:
+        :return:
+        """
+
+        convert_dict = {'Year': str}
+        df = database_object.astype(convert_dict)
+        df = df.assign(Dates=df['Month'] + df['Year'])
+        df['Dates'] = pd.to_datetime(df['Dates'].tolist(), format="%B%Y", errors='ignore')
+        df.insert(1, 'Dates', df.pop('Dates'))
+        df['Percent of Listing Price Received'] = df['Percent of Listing Price Received'] / 100
+        df = df[df['County'] != 'N.A']
+
+        return df
+
+    @staticmethod
     def cloropleth_maps_state(filename):
+        """
+        DELETE
+
+        :param filename:
+        :return:
+        """
         filename = filename
         df = pd.read_excel(filename, sheet_name='All Months')
         years = df['Year'].unique().tolist()
@@ -300,6 +341,35 @@ class Scraper:
         #         fig.update_geos(fitbounds="locations", visible=False)
         #         fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
         #         fig.show()
+
+    @staticmethod
+    def connect2postgresql():
+        """
+
+        :return:
+        """
+
+        # Do I create a function which retrieve my info from UniversalFunction.get_us_pw?
+        '''
+        database: the name of the database that you want to connect.
+        user: the username used to authenticate.
+        password: password used to authenticate.
+        host: database server address e.g., localhost or an IP address.
+        port: the port number that defaults to 5433 if it is not provided.
+        '''
+
+        username, pw = Scraper.get_us_pw('PostgreSQL')
+
+        conn = psycopg2.connect(
+            host="localhost",
+            database="nj_realestate_data",
+            user=username,
+            port=5433,
+            password=pw)
+
+        cur = conn.cursor()
+
+        return tuple([cur, conn, username, pw])
 
     @logger_decorator
     def corrupted_files(self, corrupt_list, **kwargs):
@@ -387,75 +457,35 @@ class Scraper:
                 session.get(url)  # Requesting initial log-in page
                 session.post(url2, data=payload1)  # response object for initially logging into website
 
-                try:
-                    for k, v in corrupt_dict.items():
+                for k, v in corrupt_dict.items():
 
-                        # Redundant checker if a 2019 file has slipped through the first check
-                        if v[2] == '2019':
-                            continue
-                        else:
-                            y = v[2]
-                        for k1, v1 in self.__months.items():
-                            if v[1] in v1:
-                                m = k1
+                    # Redundant checker if a 2019 file has slipped through the first check
+                    if v[2] == '2019':
+                        continue
+                    else:
+                        y = v[2]
+                    for k1, v1 in self.__months.items():
+                        if v[1] in v1:
+                            m = k1
 
-                        url3, new_filename = self.create_url_and_pdfname(base_url, y, m, v[0])
+                    url3, new_filename = self.create_url_and_pdfname(base_url, y, m, v[0])
 
-                        Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
-                                             logger)
+                    Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
+                                         logger)
 
-                except IOError:
-                    """An OS Error has occurred """
-                    logger.exception(f'IOError has Occurred')
-
-                except requests.exceptions.HTTPError as rht:
-                    """An HTTP error occurred."""
-                    logger.exception(f'An HTTP has Occurred: {rht}')
-
-                except requests.exceptions.Timeout as ret:
-                    """The request timed out.
-                    Catching this error will catch both
-                    :exc:`~requests.exceptions.ConnectTimeout` and
-                    :exc:`~requests.exceptions.ReadTimeout` errors.
-                    """
-                    logger.exception(f'The Request Has Timed Out: {ret}')
-
-                except requests.exceptions.InvalidURL as rei:
-                    """The URL provided was somehow invalid."""
-                    logger.exception(f'The URL Provided Was Invalid: {rei}')
-
-                except requests.exceptions.RetryError as rer:
-                    """Custom retries logic failed"""
-                    logger.exception(f'Custom Retries Logic Failed: {rer}')
-
-                except requests.exceptions.StreamConsumedError as res:
-                    """The content for this response was already consumed."""
-                    logger.exception(f'The Content For This Response Was Already Consumed: {res}')
-
-                except requests.exceptions.ContentDecodingError as rec:
-                    """Failed to decode response content."""
-                    logger.exception(f'Failed to Decode Response Content: {rec}')
-
-                except requests.exceptions.ChunkedEncodingError as rece:
-                    """The server declared chunked encoding but sent an invalid chunk."""
-                    logger.exception(f'Invalid Chunk Encoding: {rece}')
-
-                except Exception as e:
-                    logger.exception(f'An Error Has Unhandled Occurred: {e} ')
-
-                else:
-
-                    logger.removeHandler(f_handler)
-                    logger.removeHandler(c_handler)
-                    logging.shutdown()
-                    logger.info('All corrupted files have been captured. The Extract RE Data function will now initiate...')
-                    time.sleep(0.5)
+                logger.removeHandler(f_handler)
+                logger.removeHandler(c_handler)
+                logging.shutdown()
+                logger.info('All corrupted files have been captured. The Extract RE Data function will now initiate...')
+                time.sleep(0.5)
 
             return possible_corrupted_files
 
     @classmethod
     def create_event_log(cls):
         """
+        UPDATE - READ LOG FROM SQL DB
+
         Classmethod which is run during class initialization update the class variable "event log" with
         the class' run history and updates the class variable "no_of_runs". In the event there isn't a shelf
         file available with event log history, a new event log dictionary is created.
@@ -483,7 +513,52 @@ class Scraper:
                     for kn in key_names:
                         cls.event_log[cls.no_of_runs].setdefault(kn, '')
 
+    @staticmethod
+    def create_ncjar_sales_table(cursor_var, conn_var):
+        """
+        NOT NEEDED - DELETE
+
+        :param cursor_var:
+        :param conn_var:
+        :return:
+        """
+
+        statement = "CREATE TABLE ncjar_sales_data (id serial, city varchar(250), dates date, county varchar(250)," \
+                    "quarter char(2), month varchar(10), year smallint, new_listings smallint, new_listing_yoy_change real," \
+                    "closed_sales smallint, closed_sales_yoy_change real, dom smallint, dom_yoy_change real," \
+                    "median_sales_price integer, median_sales_price_yoy_change real, polpr real, polpr_yoy_change real," \
+                    "inventory_of_homes smallint, inventory_of_homes_yoy_change real, months_of_supply real," \
+                    "months_of_supply_yoy_change real);"
+
+        cursor_var.execute(statement)
+        conn_var.commit()
+
+    @staticmethod
+    def create_sql_table(table_name, cursor_var, conn_var, **kwargs):
+        """
+
+        :param table_name:
+        :param cursor_var:
+        :param conn_var:
+        :param kwargs:
+        :return:
+        """
+
+        logger = kwargs['logger']
+
+        if table_name == 'ncjar_sales_data':
+            Scraper.create_ncjar_sales_table(cursor_var, conn_var)
+            logger.info(f'PostgreSQL table named {table_name} has been created')
+
     def create_url_and_pdfname(self, base_url, year_var, month_var, town_var):
+        """
+
+        :param base_url:
+        :param year_var:
+        :param month_var:
+        :param town_var:
+        :return:
+        """
 
         city_list = town_var.split(' ')
         merged_city_name = ''.join(city_list)
@@ -505,6 +580,8 @@ class Scraper:
     @logger_decorator
     def CreateZip(*args, **kwargs):
         """
+        NOT NEEDED - DELETE
+
         Staticmethod which creates a zipfile of all previously downloaded and sorted real estate pdfs
         :param args: None
         :param kwargs: Keyword argument dictionary which houses the logger function variables
@@ -570,6 +647,8 @@ class Scraper:
     @staticmethod
     def data_na(town, month, year, main_dict, year_dict):
         """
+        UPDATE AND DELETE THE FY PORTION
+
         Staticmethod which assigns default values of 0, 0.0 and N/A to variables used in the extraction function
         for real estate pdfs which were found to have corrupted data
         :param town: str variable of the name of the town
@@ -671,6 +750,16 @@ class Scraper:
 
     @staticmethod
     def download_pdf(session_var, pdf_url, params_dict, pdf_name, corrupted_files_list, logger):
+        """
+
+        :param session_var:
+        :param pdf_url:
+        :param params_dict:
+        :param pdf_name:
+        :param corrupted_files_list:
+        :param logger:
+        :return:
+        """
 
         with session_var.get(pdf_url, params=params_dict, stream=True) as reader, open(pdf_name, 'wb') as writer:
             for chunk in reader.iter_content(chunk_size=1000000):
@@ -739,6 +828,10 @@ class Scraper:
     # This is an instance method because I'm using a static method inside the function which may not be able
     def event_log_update(self, name, run_time, logger):
         """
+        UPDATE
+        EVENT LOG SHOULD BE A PANDAS DF AND THE NEW DATA SHOULD BE A PANDAS
+        SERIES WHICH IS APPENEDED TO THE BOTTOM OF THE FULL LOG
+
         Instance method which updates the event log with runtime data of the most recent NJR10k download.
         Stores the type of downlaod/update which was run, the length of the download runtime, current date and
         length in time between the previous and current program runs
@@ -808,7 +901,9 @@ class Scraper:
                     lines = target.split('\n')
                     lines = lines[24:]
 
-                if type(town) is list:
+                if len(town) > 1:
+                    # Index 1 in this list would be the county name. This try-except block asserts the county
+                    # name located in the pdf matches the one in the file name
                     try:
                         if town[0] == lines[2]:
                             real_town = town[0]
@@ -822,7 +917,8 @@ class Scraper:
 
                         # Check if any recognizable town name is found inside the target pdf location
                         else:
-                            real_town, county = self.pdf_redundancy_check(lines, pdfname, month1, year1, logger)
+                            real_town, county = self.pdf_redundancy_check(lines, pdfname, month1, year1, main_dict,
+                                                                          year_dict, logger)
 
                     except KeyError:
                         logger.exception(f'***{real_town} of {town[1]} is not in the state dictionary.\n'
@@ -831,17 +927,18 @@ class Scraper:
                     finally:
                         assert county == town[1], f'{pdfname} corrupted. County names does not match'
 
-                elif type(town) is not list:
-                    if town == lines[2]:
-                        real_town = town
+                else:
+                    if town[0] == lines[2]:
+                        real_town = town[0]
                         county = self.check_county(lines[3], real_town)
 
-                    elif town == lines[4]:
-                        real_town = town
+                    elif town[0] == lines[4]:
+                        real_town = town[0]
                         county = self.check_county(lines[5], real_town)
 
                     else:
-                        real_town, county = self.pdf_redundancy_check(lines, pdfname, month1, year1, logger)
+                        real_town, county = self.pdf_redundancy_check(lines, pdfname, month1, year1, main_dict,
+                                                                      year_dict, logger)
 
                 Scraper.good_data(pdfname, target, real_town, county, month1, year1, main_dict, year_dict)
                 logger.info(f'The data for {pdfname} has been extracted')
@@ -903,6 +1000,12 @@ class Scraper:
 
     @staticmethod
     def find_closed_sales(pdf_text, month_var=None):
+        """
+        DELETE THE FY PORTION
+        :param pdf_text:
+        :param month_var:
+        :return:
+        """
 
         variable_list = []
 
@@ -952,6 +1055,12 @@ class Scraper:
 
     @staticmethod
     def find_dom(pdf_text, month_var=None):
+        """
+        DELETE THE FY PORTION
+        :param pdf_text:
+        :param month_var:
+        :return:
+        """
 
         variable_list = []
 
@@ -989,6 +1098,12 @@ class Scraper:
 
     @staticmethod
     def find_inventory(pdf_text, month_var=None):
+        """
+        DELETE THE FY PORTION
+        :param pdf_text:
+        :param month_var:
+        :return:
+        """
 
         variable_list = []
 
@@ -1031,6 +1146,11 @@ class Scraper:
 
     @staticmethod
     def find_key_metrics(pdf_text):
+        """
+
+        :param pdf_text:
+        :return:
+        """
 
         key_metrics_basic_pattern = re.compile(
             r'Key\sMetrics\s(\d{4})\s(\d{4})\sPercent\sChange\sThru\s\d{1,2}?-\d{4}\sThru\s\d{1,2}?-\d{4}\sPercent\sChange')
@@ -1040,6 +1160,12 @@ class Scraper:
 
     @staticmethod
     def find_median_sales(pdf_text, month_var=None):
+        """
+        DELETE THE FY PORTION
+        :param pdf_text:
+        :param month_var:
+        :return:
+        """
 
         variable_list = []
 
@@ -1080,6 +1206,11 @@ class Scraper:
 
     @staticmethod
     def find_month(pdf_text):
+        """
+
+        :param pdf_text:
+        :return:
+        """
 
         month_pattern = re.compile(
             r'(January|February|March|April|May|June|July|August|September|October|November|December)\sYear\sto\sDate\sSingle\sFamily')
@@ -1088,6 +1219,12 @@ class Scraper:
 
     @staticmethod
     def find_new_listings(pdf_text, month_var=None):
+        """
+        DELETE THE FY PORTION
+        :param pdf_text:
+        :param month_var:
+        :return:
+        """
 
         variable_list = []
 
@@ -1126,6 +1263,12 @@ class Scraper:
 
     @staticmethod
     def find_percent_lpr(pdf_text, month_var=None):
+        """
+        DELETE THE FY PORTION
+        :param pdf_text:
+        :param month_var:
+        :return:
+        """
 
         variable_list = []
 
@@ -1165,6 +1308,12 @@ class Scraper:
 
     @staticmethod
     def find_supply(pdf_text, month_var=None):
+        """
+        DELETE THE FY PORTION
+        :param pdf_text:
+        :param month_var:
+        :return:
+        """
 
         variable_list = []
 
@@ -1218,7 +1367,7 @@ class Scraper:
         os.chdir('F:\\Jibreel Hameed\\Kryptonite')
         wb = openpyxl.load_workbook('get_us_pw.xlsx')
         sheet = wb.active
-        for i,n in enumerate(sheet['A0' : 'A20']):
+        for i,n in enumerate(sheet['A0' : 'A50']):
             for cell in n:
                 if website == cell.value:
                     username = sheet['C' + str(i+1)].value
@@ -1231,7 +1380,7 @@ class Scraper:
     @staticmethod
     def good_data(pdfname, target, city, county, month1, year1, main_dict, year_dict):
         """
-
+        MAY NOT NEED THE FY PORTION. DONT TRACK FULL YEAR DICTIONARY ANYMORE
         :param pdfname:
         :param target:
         :param city:
@@ -1333,6 +1482,10 @@ class Scraper:
     # Used in case the njr10k or the update_njr10k functions are used recursively.
     # This function will find the latest file downloaded and continue from that point
     def latest_file(self):
+        """
+        THIS NEEDS TO BE REFACTORED
+        :return:
+        """
 
         base_path = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder'
 
@@ -1388,6 +1541,12 @@ class Scraper:
     @staticmethod
     @logger_decorator
     def matplot_lines(filename, **kwargs):
+        """
+        NOT NEEDED - DELETED
+        :param filename:
+        :param kwargs:
+        :return:
+        """
 
         logger = kwargs['logger']
         f_handler = kwargs['f_handler']
@@ -1409,7 +1568,7 @@ class Scraper:
             cities = temp_df1['City'].unique().tolist()
             cols = math.ceil(len(cities) / 10)
 
-            pdfname = 'F:\\Real Estate Investing\\JQH Holding Company LLC\\Property Data\\' + county + ' Stats PDF.pdf'
+            pdfname = 'F:\\Real Estate Investing\\JQH Holding Company LLC\\Property Data\\' + county + ' Stats PDF (New).pdf'
             with PdfPages(pdfname) as PDFMaker:
                 for city in cities:
                     plot_container = []
@@ -1422,9 +1581,10 @@ class Scraper:
                         plt.figure(fig1_num)
                         axs = plt.subplot(3, 2, idx1 + 1)
                         Scraper.nj10k_linechart_plotter(axs)
-                        plt.plot(target_df['Dates'], target_df[column], label=city)
-                        plt.plot(target_df['Dates'], [target_df[column].mean() for _ in range(len(target_df['Dates']))],
-                                 color='black', label=f'{len(years)} Year Avg')
+                        for y in years:
+                            sorted_df = target_df[target_df['Year'] == y]
+                            plt.plot(pd.to_datetime(sorted_df['Dates'].dt.month.unique().tolist(), format="%m"),
+                                     sorted_df[column], label=y)
                         plt.ylabel(column, fontsize='small')
 
                     plot, label = axs.get_legend_handles_labels()
@@ -1432,7 +1592,7 @@ class Scraper:
                     lab_container.extend(label)
                     fig1 = plt.figure(fig1_num)
                     plt.figlegend(plot_container, lab_container, loc='outside left upper', bbox_to_anchor=(0.53, 0.32),
-                                  ncols=cols, title='Cities in ' + county, fontsize='x-small', title_fontsize='x-small',
+                                  ncols=cols, title=city, fontsize='x-small', title_fontsize='x-small',
                                   markerscale=0.4)
                     PDFMaker.savefig(fig1)
                     plt.close()
@@ -1442,6 +1602,11 @@ class Scraper:
     # Function which logs into njrealtor to automatically download the pdfs from each city to get ready to scrape
     @logger_decorator
     def njr10k(self, **kwargs):
+        """
+
+        :param kwargs:
+        :return:
+        """
 
         logger = kwargs['logger']
         f_handler = kwargs['f_handler']
@@ -1487,87 +1652,43 @@ class Scraper:
             elif towns_list == 'Read Logger File':
                 return 'Read Logger File'
 
-            try:
-                for i in towns_list:
-                    # Takes the name of the city from the list and splits the string at the space,
-                    # then joins the strings in the newly created list
-                    # This is needed to use in the url3 variable to access the correct 10k pdfs
+            for i in towns_list:
+                # Takes the name of the city from the list and splits the string at the space,
+                # then joins the strings in the newly created list
+                # This is needed to use in the url3 variable to access the correct 10k pdfs
 
-                    for y in self.__years:
+                for y in self.__years:
 
-                        if y == '2019':
-                            # If year = 2019, there is no data available from January to Sept.
-                            # Also some cities will not have data available for Sept and produce data for other dates
-                            months1 = months[8:13]
-                            for m in months1:
+                    if y == '2019':
+                        # If year = 2019, there is no data available from January to Sept.
+                        # Also some cities will not have data available for Sept and produce data for other dates
+                        months1 = months[8:13]
+                        for m in months1:
 
-                                url3, new_filename = self.create_url_and_pdfname(base_url, y, m, i)
+                            url3, new_filename = self.create_url_and_pdfname(base_url, y, m, i)
 
-                                Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
-                                                     logger)
+                            Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
+                                                 logger)
 
-                        elif y == self.__years[-1]:
-                            # If year is the latest year, months1 will equal a sliced list of the
-                            # first month represented by 01 to the latest month represent by 2 digits
-                            for k, v in self.__months.items():
-                                # If v equals the month of the most current data
-                                if v == Scraper.current_data.split(' ')[0]:
-                                    months1 = months[:months.index(k) + 1]
-                            for m in months1:
-                                url3, new_filename = self.create_url_and_pdfname(base_url, y, m, i)
+                    elif y == self.__years[-1]:
+                        # If year is the latest year, months1 will equal a sliced list of the
+                        # first month represented by 01 to the latest month represent by 2 digits
+                        for k, v in self.__months.items():
+                            # If v equals the month of the most current data
+                            if v == Scraper.current_data.split(' ')[0]:
+                                months1 = months[:months.index(k) + 1]
+                        for m in months1:
+                            url3, new_filename = self.create_url_and_pdfname(base_url, y, m, i)
 
-                                Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
-                                                     logger)
+                            Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
+                                                 logger)
 
-                        elif y != '2019':
-                            for m in months:
-                                url3, new_filename = self.create_url_and_pdfname(base_url, y, m, i)
+                    elif y != '2019':
+                        for m in months:
+                            url3, new_filename = self.create_url_and_pdfname(base_url, y, m, i)
 
-                                Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
-                                                     logger)
-
-            except IOError:
-                """An OS Error has occurred """
-                logger.exception(f'IOError has Occurred')
-                self.njr10k()
-
-            except requests.exceptions.HTTPError as rht:
-                """An HTTP error occurred."""
-                logger.exception(f'An HTTP has Occurred: {rht}')
-
-            except requests.exceptions.Timeout as ret:
-                """The request timed out.
-    
-                Catching this error will catch both
-                :exc:`~requests.exceptions.ConnectTimeout` and
-                :exc:`~requests.exceptions.ReadTimeout` errors.
-                """
-                logger.exception(f'The Request Has Timed Out: {ret}')
-
-            except requests.exceptions.InvalidURL as rei:
-                """The URL provided was somehow invalid."""
-                logger.exception(f'The URL Provided Was Invalid: {rei}')
-
-            except requests.exceptions.RetryError as rer:
-                """Custom retries logic failed"""
-                logger.exception(f'Custom Retries Logic Failed: {rer}')
-
-            except requests.exceptions.StreamConsumedError as res:
-                """The content for this response was already consumed."""
-                logger.exception(f'The Content For This Response Was Already Consumed: {res}')
-
-            except requests.exceptions.ContentDecodingError as rec:
-                """Failed to decode response content."""
-                logger.exception(f'Failed to Decode Response Content: {rec}')
-
-            except requests.exceptions.ChunkedEncodingError as rece:
-                """The server declared chunked encoding but sent an invalid chunk."""
-                logger.exception(f'Invalid Chunk Encoding: {rece}')
-
-            except Exception as e:
-                logger.exception(f'An Unhandled Error Has Occurred: {e}')
-
-            else:
+                            Scraper.download_pdf(session, url3, params, new_filename, possible_corrupted_files,
+                                                 logger)
 
                 end_time = datetime.datetime.now()
                 run_time = end_time - start_time
@@ -1586,16 +1707,26 @@ class Scraper:
 
     @staticmethod
     def nj10k_linechart_plotter(axes_label):
+        """
+        NOT NEEDED - DELETE
+        :param axes_label:
+        :return:
+        """
         axes_label.tick_params(axis='y', labelsize='x-small')
         axes_label.tick_params(axis='x', labelsize='x-small', labelrotation=45)
-        axes_label.xaxis.set_major_locator(mdates.MonthLocator(bymonth=(1, 4, 7, 10)))
-        axes_label.xaxis.set_minor_locator(mdates.MonthLocator())
+        axes_label.xaxis.set_major_locator(mdates.MonthLocator(bymonth=(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)))
+        axes_label.xaxis.set_major_formatter(mdates.DateFormatter('%B'))
         axes_label.yaxis.set_minor_locator(ticker.AutoMinorLocator())
-        axes_label.xaxis.set_major_formatter(mdates.DateFormatter('%y-%b'))
+
 
     # Function uses Selenium to webscrape the cities and counties from the njrealtor 10k website
     @logger_decorator
     def njrdata(self, **kwargs):
+        """
+        MAY NOT BE NEEDED - DELETE
+        :param kwargs:
+        :return:
+        """
 
         logger = kwargs['logger']
         f_handler = kwargs['f_handler']
@@ -1657,6 +1788,11 @@ class Scraper:
     # Function which will organize the PDF Temp Files Folder by year, month and city
     @staticmethod
     def OrganizeFiles(results_from_corrupt):
+        """
+        NOT NEEDED - DELETE
+        :param results_from_corrupt:
+        :return:
+        """
         print('Now organizing files into folders separated by year and city...')
         base_path = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files'
         target_path = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder'
@@ -1725,50 +1861,55 @@ class Scraper:
 
     @logger_decorator
     def pandas2excel(self, dict1, dict2, **kwargs):
+        """
+        NOT NEEDED - DELETE
+        :param dict1:
+        :param dict2:
+        :param kwargs:
+        :return:
+        """
 
         """ The dict argument will be a nested dictionary.
               dict = {'2019' : {'New Listings': [],
                                 'Closed Sales' : [],
                                 etc}"""
         print('Storing Quarterly and Full Year Data into an Excel Spreadsheet...')
+
         logger = kwargs['logger']
         f_handler = kwargs['f_handler']
         c_handler = kwargs['c_handler']
+
         previous_dir = os.getcwd()
         os.chdir('F:\\Real Estate Investing\\JQH Holding Company LLC\\Real Estate Data')
         # Store the dfs in one Excel file under different sheets for later processing
         filename = 'NJ 10k Real Estate Data ' + str(datetime.datetime.today().date()) + '.xlsx'
+
         with pd.ExcelWriter(filename) as writer:
             logger.info(f'Now creating Dataframes for Main Dictionary and Full Year')
             list1 = []
             list2 = []
             for k in dict1.keys():
-                if k == '2018':
+                if dict1[k] == {}:
                     continue
                 else:
-                    df = pd.DataFrame(dict1[k])
-                    convert_dict = {'Year': str}
-                    df = df.astype(convert_dict)
-                    df = df.assign(Dates=df['Month'] + df['Year'])
-                    df['Dates'] = pd.to_datetime(df['Dates'].tolist(), format="%B%Y", errors='ignore')
-                    df.insert(1, 'Dates', df.pop('Dates'))
-                    df['Percent of Listing Price Received'] = df['Percent of Listing Price Received'] / 100
+                    df = Scraper.clean_db(pd.DataFrame(dict1[k]))
                     logger.info(f'Quarterly dataframe for {k} has been created')
                     list1.append(df)
-                    df1 = pd.DataFrame(dict2[k])
+
+                if dict2[k] == {}:
+                    continue
+                else:
+                    df1 = Scraper.clean_db(pd.DataFrame(dict2[k]))
                     logger.info(f'Yearly dataframe for {k} has been created')
                     list2.append(df1)
-                    # df.to_excel(writer, sheet_name= k + ' By Month', index_label='City', merge_cells=False)
-                    # df1.to_excel(writer, sheet_name= k + ' Full Year', index_label='City', merge_cells=False)
-                    # logger.info(f'Both dataframes for {k} have been sent to the Excel file')
 
             logger.info(f'Now joining all quarterly dataframes...')
             all_months = pd.concat(list1)
-            all_months.to_excel(writer, sheet_name='All Months', index_label='City', merge_cells=False)
+            all_months.to_excel(writer, sheet_name='All Months', index=False)
             logger.info(f'All quarterly dataframes have been joined and sent to the Excel file')
             logger.info(f'Now joining all yearly dataframes...')
             all_years = pd.concat(list2)
-            all_years.to_excel(writer, sheet_name='All Years', index_label='City', merge_cells=False)
+            all_years.to_excel(writer, sheet_name='All Years', index=False)
             logger.info(f'All yearly dataframes have been joined and sent to the Excel file')
 
         os.chdir(previous_dir)
@@ -1780,7 +1921,63 @@ class Scraper:
         return filename
 
     @staticmethod
+    @logger_decorator
+    def pandas2sql(db, table_name, full_year_db=None, fy_table_name=None, **kwargs):
+        """
+
+        :param db:
+        :param table_name:
+        :param full_year_db:
+        :param fy_table_name:
+        :param kwargs:
+        :return:
+        """
+
+        logger = kwargs['logger']
+        f_handler = kwargs['f_handler']
+        c_handler = kwargs['c_handler']
+
+        # I need to not drop the duplicate 'ADDRESS' table in the dbs
+        cursor, conn, username, pw= Scraper.connect2postgresql()  # Creates a seperate connection to PostgreSQL
+        logger.info('PostgreSQL Database connection made')
+
+        # Creates a connection from Pandas to PostgreSQL
+        engine = create_engine(f"postgresql+psycopg2://{username}:{pw}@localhost:5433/nj_realestate_data")
+
+        db = Scraper.clean_db(db)
+        final_db = Scraper.rename_pandas_columns(db)
+
+        if Scraper.sql_table_check(cursor, table_name):
+            final_db.to_sql(table_name, engine, if_exists='append', chunksize=1000, index=False)
+
+        else:
+            Scraper.create_sql_table(table_name, cursor, conn, **kwargs)
+            final_db.to_sql(table_name, engine, if_exists='append', chunksize=1000, index=False)
+
+        if full_year_db is not None:
+            full_year_db = Scraper.clean_db(full_year_db)
+            final_fy_db = Scraper.rename_pandas_columns(full_year_db)
+
+            if Scraper.sql_table_check(cursor, fy_table_name):
+                final_fy_db.to_sql(fy_table_name, engine, if_exists='append', chunksize=1000, index=False)
+
+            else:
+                Scraper.create_sql_table(fy_table_name, cursor, conn, **kwargs)
+                final_db.to_sql(fy_table_name, engine, if_exists='append', chunksize=1000, index=False)
+
+        conn.close()
+
+        logger.removeHandler(f_handler)
+        logger.removeHandler(c_handler)
+        logging.shutdown()
+
+    @staticmethod
     def parse_pdfname(pdf_name):
+        """
+
+        :param pdf_name:
+        :return:
+        """
 
         info = pdf_name.rstrip('.pdf').split(' ')
         town_directory = info[0:len(info) - 2]
@@ -1792,13 +1989,15 @@ class Scraper:
                 town = ' '.join(town_directory[0:(town_directory.index('County') - 1)])
             else:
                 town = ' '.join(town_directory)
+                county = None
         else:
             town = ' '.join(town_directory)
+            county = None
 
         month1 = info[-2]
         year1 = info[-1]
 
-        if county:
+        if county is not None:
             parsed_results = (town_directory, month1, year1, town, county)
         else:
             parsed_results = (town_directory, month1, year1, town)
@@ -1808,6 +2007,11 @@ class Scraper:
     # Generator function which will be used in tandem with the extract_re_data function to put data into main dictionary
     @staticmethod
     def pdf_generator(pdfname=None):
+        """
+
+        :param pdfname:
+        :return:
+        """
 
         base_path = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder'
         # Variable pdfname will either be a string argument or None
@@ -1825,7 +2029,7 @@ class Scraper:
 
         elif type(pdfname) is list:
             filenames = []
-            years = ['2019', '2020', '2021', '2022', '2023']
+            years = ['2019', '2020', '2021', '2022', '2023', '2024']
             for year in years:
                 for municipality in pdfname:
                     search_directory = f'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files\\{year}\\{municipality}'
@@ -1850,7 +2054,18 @@ class Scraper:
                 else:
                     continue
 
-    def pdf_redundancy_check(self, pdf_text, pdf_name, month_var, year_var, logger):
+    def pdf_redundancy_check(self, pdf_text, pdf_name, month_var, year_var, main_dict, year_dict, logger):
+        """
+
+        :param pdf_text:
+        :param pdf_name:
+        :param month_var:
+        :param year_var:
+        :param main_dict:
+        :param year_dict:
+        :param logger:
+        :return:
+        """
 
         temp_town = None
         temp_county = None
@@ -1869,7 +2084,7 @@ class Scraper:
 
         if temp_town or temp_county is None:
             logger.info(f'{pdf_name} corrupted. Does not have reliable data')
-            Scraper.data_na(temp_town, month_var, year_var)
+            Scraper.data_na(temp_town, month_var, year_var, main_dict, year_dict)
             raise Exception(f'{pdf_name} corrupted')
 
         elif os.path.exists(f'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\' +
@@ -1888,6 +2103,11 @@ class Scraper:
 
     @staticmethod
     def quarter(month):
+        """
+
+        :param month:
+        :return:
+        """
         if month in ['January', 'February', 'March']:
             quarter = 'Q1'
         elif month in ['April', 'May', 'June']:
@@ -1902,6 +2122,12 @@ class Scraper:
     @staticmethod
     @run_quarterly_statistics(datetime.datetime.today())
     def quarterly_statistics(filename):
+        """
+        NOT NEEDED - DELETE
+
+        :param filename:
+        :return:
+        """
         # This method will run matplot_lines and njr10k_stats/njr10k_update_stats, cloropleth, histograms and Seaborn
         pass
 
@@ -1909,6 +2135,11 @@ class Scraper:
     # In the event a failure occurs before reaching the extract_re_data function
     # I can read the logger file and start again as a midway point
     def read_logger(self, logger):
+        """
+
+        :param logger:
+        :return:
+        """
 
         base_path = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder'
         corrupt_pattern = re.compile(r'\d+-\w+-\d+\s\d+:\d+:\d+\s-\supdate_njr10k|njr10k\s-\sWARNING\s-\sWARNING!\s(.*.pdf)\sis\spossibly\sa\scorrupted\sfile')
@@ -1955,16 +2186,70 @@ class Scraper:
 
         return possible_corrupted_files
 
+    @staticmethod
+    def rename_pandas_columns(db):
+        """
+        NOT NEEDED - DELETE
+
+        :param db:
+        :return:
+        """
+
+        db = db.rename(columns={'City': 'city', 'Dates': 'dates', 'County': 'county',
+                                'Quarter': 'quarter', 'Month': 'month', 'Year': 'year',
+                                'New Listings': 'new_listings', 'New Listing % Change (YoY)': 'new_listing_yoy_change',
+                                'Closed Sales': 'closed_sales', 'Closed Sale % Change (YoY)': 'closed_sales_yoy_change',
+                                'Days on Markets': 'dom', 'Days on Market % Change (YoY)': 'dom_yoy_change',
+                                'Median Sales Prices': 'median_sales_price', 'Median Sales Price % Change (YoY)': 'median_sales_price_yoy_change',
+                                'Percent of Listing Price Received': 'polpr', 'Percent of Listing Price Receive % Change (YoY)': 'polpr_yoy_change',
+                                'Inventory of Homes for Sales': 'inventory_of_homes', 'Inventory of Homes for Sale % Change (YoY)': 'inventory_of_homes_yoy_change',
+                                'Months of Supply': 'months_of_supply', 'Months of Supplies % Change (YoY)': 'months_of_supply_yoy_change'})
+
+        return db
+
+    @staticmethod
+    def sql_table_check(cursor_var, table_name):
+        """
+
+        :param cursor_var:
+        :param table_name:
+        :return:
+        """
+
+        # https://stackoverflow.com/questions/1874113/checking-if-a-postgresql-table-exists-under-python-and-probably-psycopg2
+        # https://thepythoncode.com/article/use-gmail-api-in-python
+        # https://stackoverflow.com/questions/51054245/read-mails-from-custom-label-in-gmail-using-pythongoogle-api
+        # https://stackoverflow.com/questions/41800867/gmail-api-using-multiple-labelids
+
+        cursor_var.execute("SELECT EXISTS(SELECT * FROM information_schema.tables WHERE table_name = %s)",
+                           (table_name,))
+
+        return cursor_var.fetchone()[0]
+
     @classmethod
     def state_dictionary(cls):
-        filename = 'F:\\Real Estate Investing\\JQH Holding Company LLC\\Real Estate Data\\NJ 10k Real Estate Data 2023-08-26.xlsx'
-        df = pd.read_excel(filename, sheet_name='2022 Full Year', index_col=1)
-        state_dict = df[['County']]
+        """
+
+        :return:
+        """
+
+        cursor, conn, username, pw = Scraper.connect2postgresql()  # Creates a seperate connection to PostgreSQL
+        engine = create_engine(f"postgresql+psycopg2://{username}:{pw}@localhost:5433/nj_realestate_data")
+
+        sql_query = "SELECT DISTINCT city, county FROM ncjar_sales_data ORDER BY county, city;"
+        state_dict = pd.read_sql_query(sql_query, con=engine, index_col='city')
+
+        conn.close()
 
         cls.state_dict = state_dict
 
     @staticmethod
     def text_message(message_body):
+        """
+
+        :param message_body:
+        :return:
+        """
         # Your Account SID from twilio.com/console
         account_sid = 'AC91ccb829e7e47ff05e69d8f96d627f73'
         # Your Auth Token from twilio.com/console
@@ -1984,6 +2269,13 @@ class Scraper:
     # and the results of the current_data_avail function. If the values are not the same, run the program
     @logger_decorator
     def update_njr10k(self, start, finish, **kwargs):
+        """
+
+        :param start:
+        :param finish:
+        :param kwargs:
+        :return:
+        """
 
         start_time = datetime.datetime.now()
 
@@ -2089,6 +2381,11 @@ class Scraper:
 
     @staticmethod
     def waiting(sleep_time):
+        """
+
+        :param sleep_time:
+        :return:
+        """
         sleep_time2 = str(sleep_time.days)
         sleep_time3 = int(sleep_time2) * 86400  # 86,400 seconds in a day
         if sleep_time3 > 86400:
@@ -2219,6 +2516,124 @@ class Scraper:
 
         return excelfile
 
+   # @run_main
+    @logger_decorator
+    def main2(self, **kwargs):
+
+        global main_dictionary
+        global full_year
+
+        logger = kwargs['logger']
+        f_handler = kwargs['f_handler']
+        c_handler = kwargs['c_handler']
+
+        # # If this code has never been run before, the full NJR10k will need to be run all the way back from 2018
+        if self.no_of_runs == 0:
+
+            first_results = self.njr10k()
+            # The NJR10k function will return a list if the pdfs found to be possibly corrupted
+            # If length of the list is created than 0,
+            # the program will trigger the next function to download corrupted data
+            if first_results == 'Read Logger File':
+                # Read latest logger file to get a list of the corrupted files
+                second_results = self.corrupted_files(self.read_logger(logger))
+            elif first_results == 'All Files Downloaded':
+                second_results = ['No Corrupted Files']
+            elif len(first_results) > 0:
+                second_results = self.corrupted_files(first_results)
+
+            logger.info('Beginning PDF extraction...')
+            time.sleep(1)
+            for pdf in Scraper.pdf_generator():
+                self.extract_re_data(pdf, second_results, main_dict=main_dictionary, year_dict=full_year)
+
+            winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
+            logger.info('PDF extraction is now complete...')
+
+            old_dir = os.getcwd()
+            # Use the Shelve module to save data for later use
+            logger.info('Saving the data for Main Dictionary, Full Year and Event Log...')
+            os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
+            with shelve.open('NJ Scrapper Data Dictionary_v3') as saved_data_file:
+                saved_data_file['Event Log'] = Scraper.event_log
+
+        # If this code has been run before, the Updated NJR10k will need to be run from last pulled data
+        elif self.no_of_runs > 0:
+            """Scraping the files from NJRealtor"""
+            start1, finish1 = Scraper.check_results()
+            first_results = self.update_njr10k(start1, finish1)
+            if first_results == 'Read Logger File':
+                # Read latest logger file to get a list of the corrupted files
+                second_results = self.corrupted_files(self.read_logger(logger))
+            elif first_results == 'All Files Downloaded':
+                second_results = ['No Corrupted Files']
+            elif len(first_results) > 0:
+                second_results = self.corrupted_files(first_results)
+
+            old_dir = os.getcwd()
+            logger.info('Beginning PDF extraction...')
+            time.sleep(1)
+            """Extract all the files from their respective pdfs and into the main and/or full year dictionaries"""
+            for pdf in Scraper.pdf_generator():
+                self.extract_re_data(pdf, second_results, main_dict=main_dictionary, year_dict=full_year)
+
+            winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
+            logger.info('PDF extraction is now complete...')
+
+            os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
+            logger.info('Saving the data for Main Dictionary, Full Year and Event Log...')
+            with shelve.open('NJ Scrapper Data Dictionary_v2', writeback=True) as saved_data_file:
+                saved_data_file['Event Log'] = Scraper.event_log
+                saved_data_file.sync()
+
+        logger.info('All data has been saved...')
+        os.chdir(old_dir)
+
+        logger.info('Now sorting files into respective folders by year and township...')
+        Scraper.OrganizeFiles(second_results)
+        logger.info('All files have been sorted and organized...')
+
+        now = datetime.datetime.strptime(time.ctime(), "%a %b %d %H:%M:%S %Y")
+        end_of_year = datetime.datetime.strptime(Scraper.current_data.split(' ')[1] + "/12/31", "%Y/%m/%d")
+
+        # If today's date is the last day of the year or greater run zip functino. If not, stay sleep
+        if now >= end_of_year:
+            logger.info('Now ziping files into respective folders by year and township')
+            z_name = Scraper.CreateZip()
+            logger.info(f'All files have been sorted and organized.\nFilename: {z_name}...')
+
+        logger.info(f'Now converting Main and Full Year dictionaries into Pandas dataframes\n'
+                    f'Once complete, the dataframes will be transferred to the PostgreSQL database')
+
+        main_dictionary_db = pd.DataFrame(main_dictionary)
+
+        """Appending the main and/or full year dictionaries to the existing PostgreSQL databases"""
+        if full_year != {}:
+            full_year_db = pd.DataFrame(full_year)
+            Scraper.pandas2sql(main_dictionary_db, 'ncjar_sales_data', full_year_db=full_year_db, fy_table_name='ncjar_fy_sales_data', **kwargs)
+            logger.info(f'All dataframes have been transferred to their respective PostgreSQL database tables')
+        else:
+            Scraper.pandas2sql(main_dictionary_db, 'ncjar_sales_data', **kwargs)
+            logger.info(f'The main dictionary has been transferred to its respective PostgreSQL database table')
+
+        # Fix Scraper dictionary references
+        # runs_list = [i for i in Scraper.event_log.keys()]
+        message_body = '     NJ Scrapper     ' \
+                       f"\n" \
+                       f"\nEvent Log:" \
+                       f"\nRun Date: {Scraper.event_log[Scraper.no_of_runs]['Run Date']}" \
+                       f"\nRun #: {Scraper.no_of_runs}" \
+                       f"\nRun Type: {Scraper.event_log[Scraper.no_of_runs]['Run Type']}" \
+                       f"\nLatest Available Data: {Scraper.event_log[Scraper.no_of_runs]['Latest Available Data']}" \
+                       f"\nRun Time: {Scraper.event_log[Scraper.no_of_runs]['Run Time']}" \
+                       f"\nDays Between Update: {Scraper.event_log[Scraper.no_of_runs]['Days Between Update']}" \
+
+        Scraper.text_message(message_body)
+        logger.info('Program summary has been sent through text! The program is now complete!')
+        logger.removeHandler(f_handler)
+        logger.removeHandler(c_handler)
+        logging.shutdown()
+
 
 if __name__ == '__main__':
 
@@ -2248,10 +2663,10 @@ if __name__ == '__main__':
     while True:
         try:
             obj = Scraper()
-            # doc = 'F:\\Real Estate Investing\\JQH Holding Company LLC\\Real Estate Data\\NJ 10k Real Estate Data 2023-09-29.xlsx'
+            # doc = 'F:\\Real Estate Investing\\JQH Holding Company LLC\\Real Estate Data\\NJ 10k Real Estate Data 2023-11-28.xlsx'
             # obj.cloropleth_maps_state(doc)
             # obj.matplot_lines(doc)
-            results = obj.main()
+            results = obj.main2()
 
             if results == 'RESTART':
                 continue
