@@ -1,18 +1,17 @@
 PRIORITY:
 ******I need to subscribe to CJMLS and Bright MLS for all municipal sales data
-*** Go through and delete all unnecessary/unused functions
-*** corrupted_files() not needed. Will use try-except block to catch corrupted data
-*** duplicate_vector_check() wont be needed. Will remove all duplicated when python dict converted to
-    pandas df and saved in sql
-*** duplicate_eventlog_check() not needed Will remove all duplicated when python dict converted to
-    pandas df and saved in sql
-*** pdf_redundancy_check() not needed. Will remove all duplicated when python dict converted to
-    pandas df and saved in sql
-*** I HAVE TO CREATE A TABLE THAT HOLDS THE BASIC NJREALTOR DATA
 
-125) Ensure cls.state_dictionary is pulling from the most recent Excel file/SQL table (DONE)
-    - Ensure it pulling from the correct excel file (NOT NECESSARY)
-    - Ensure cls.state_dictionary is doing what I want it to do (WORKS FINE)
+*** Create a function to load the proper shelve file if a recursive run is initiated
+*** Create a function to return the proper logger file in the read_logger(). If a recursive run is initiated the next
+day, the proper file wont be read
+*** Update read_logger to adjust the event logger pattern to find the list items, not string
+event_log_pattern = re.compile(r"('Number of Runs': \d{1,4}), ('Run Type': .*), "
+                                       r"('Latest Available Data': .*), ('Run Time': .*), ('Run Date': .*), "
+                                       r"('Days Between Update': \d{1,3})")
+*** See if Twilio is still active, if not, switch to emailing results
+________________________________________________________________________________________________________________
+
+_____________________________________________________________________________________________________________________
 
 The following functions need to be updated:
 [year for year in range(2019,date.now().year + 1)]
@@ -36,7 +35,7 @@ The following functions need to be updated:
                          'Months of Supplies % Change (YoY)': []
     }
 
-2) extract_re_data():
+2) extract_re_data(): (DONE)
      Dependencies: parse_pdfname(), good_data()
      - find the abspath of the pdfname and use that to open it
     - remove possible_corrupted_list, main_dict, year_dict as function variables
@@ -46,7 +45,7 @@ The following functions need to be updated:
     - Remove check_county() and pdf_redundancy_check()
     - Remove the county assertion
     - Remove re.error, AssertionError, and Exception from the except blocks
-    - SORT THE DATA (NOT DONE)
+    - SORT THE DATA
 
 3) good_data(): (DONE)
     - Remove assertion clause
@@ -103,7 +102,7 @@ The following functions need to be updated:
     - Do not return the town_directory
     - Only output town, county, month, year
 
-6) fill_missing_data():
+6) fill_missing_data(): (DONE)
     - Update the Scraper.pdf_generator and self.extract_re_data() functions
 
 7) data_na(): (DONE)
@@ -129,7 +128,7 @@ The following functions need to be updated:
 8) connect2postgresql(): (DONE)
     - Will use sqlalchemy to create a connection
 
-9) create_event_log(db_engine):
+9) create_event_log(db_engine): (DONE)
     - change function name to latest_event_data()
     - ***** Save most recent event log dict to sql
     - Accept the self.db_engine as a var since the classmethod cant directly access it
@@ -179,7 +178,7 @@ The following functions need to be updated:
 
     return month2num(target[0]), target[1]
 
-12) njr10k(self, session): (NEED TO HANDLE IF THIS IS AN UPDATED RUN)
+12) njr10k(self, session): (DONE)
     Dependencies: latest_file(), self.towns(), self.create_url_and_pdfname()
     - Rename njr10k_downloads(self, **kwargs):
     - new function:
@@ -223,22 +222,23 @@ The following functions need to be updated:
     - Start the logger file with all the necessary run data to be parsed in the event of a script failure
     - In the event of program failure, use logger and last downloaded pdf to create the modified timeframe in njr10k()
     - Return the name of a pdf file or 'No pdfs available'
+    - FIND A WAY TO HANDLE IF ALL FILES HAVE BEEN DOWNLOADED, SCRAPED AND SAVED
 
-14) pandas2sql():
+14) pandas2sql(): (DONE)
     - This will now be an instance method rather than static
     - Only arg will be **kwargs, table name will be a var that lives inside the function
     - Turn self.njrdata into pandas df inside function
     - Use Pandas and sqlalchemy to append df to currently existing table in PostgreSQL
 
-15) read_logger():
+15) read_logger(): (DONE)
     - Refactor to find the instance run data and last downloaded file
 
-16) logger_decorator():
+16) logger_decorator(): (DONE)
     - Only use on main(). Take logger off the other functions. Not necessary to use on multiple functions
     - Change the f_handler and c_handler logger levels to where the stream logger only displays WARNING levels or above
     and the file collects everything
 
-17) waiting() & text_message():
+17) waiting() & text_message(): (DONE)
     - Use outside of the main().
     Use in conjunction with Airflow to modify the state of when the pipeline runs and give updates
 
@@ -326,6 +326,44 @@ ________________________________________________________________________________
                        f"\nRun Time: {Scraper.event_log[Scraper.no_of_runs]['Run Time']}" \
                        f"\nDays Between Update: {Scraper.event_log[Scraper.no_of_runs]['Days Between Update']}" \
                        f"\nFilename: {excelfile}"
+
+        def waiting(sleep_time):
+    """
+
+    :param sleep_time:
+    :return:
+    """
+    sleep_time2 = str(sleep_time.days)
+    sleep_time3 = int(sleep_time2) * 86400  # 86,400 seconds in a day
+    if sleep_time3 > 86400:
+        message_body = f'There is currently no new data available. ' \
+                       f'NJRScrapper will check again in {sleep_time.days} days...'
+        Scraper.text_message(message_body)
+        time.sleep(sleep_time3)
+    else:
+        message_body = f"There is currently no new data available. Will check again tomorrow..."
+        Scraper.text_message(message_body)
+        time.sleep(86400)
+
+def fill_missing_data(self, target_directories: list, logger):
+"""
+UPDATE
+
+:param target_directories:
+:param logger:
+:return:
+"""
+
+name = "Fill Missing Data"
+start_time = datetime.datetime.now()
+
+for pdf in Scraper.pdf_generator(pdfname=target_directories):
+    self.extract_re_data(pdf, logger, update='Yes')
+
+end_time = datetime.datetime.now()
+run_time = end_time - start_time
+
+winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
 
 
 

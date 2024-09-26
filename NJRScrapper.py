@@ -1,5 +1,4 @@
 import os
-import math
 import winsound
 from itertools import product
 from tqdm.auto import trange
@@ -8,8 +7,10 @@ import shutil
 import shelve
 import datetime
 import traceback
-from datetime import datetime
+from datetime import datetime, date, timedelta
+import sqlalchemy
 from sqlalchemy import create_engine
+import psycopg2
 import logging
 import requests
 import re
@@ -19,30 +20,48 @@ from bs4 import BeautifulSoup
 from twilio.rest import Client
 
 
+def text_message(message_body):
+    """
+
+    :param message_body:
+    :return:
+    """
+    # Your Account SID from twilio.com/console
+    account_sid = 'AC91ccb829e7e47ff05e69d8f96d627f73'
+    # Your Auth Token from twilio.com/console
+    auth_token = "f686fc30c3c9bc2694f11bb5137bb28c"
+
+    twilioclient = Client(account_sid, auth_token)
+
+    twilioclient.messages.create(
+        to="+19084683728",
+        from_="+19088609446",
+        body=message_body)
+
+    print(f'Program Completed!\n{message_body}')
+
+
 class Scraper:
 
-    state_dict = ''  # Delete
-    current_data = ''
-    no_of_runs = 1
-    event_log = {0: {'Run Type': 'NJR10k', 'Latest Available Data': 'June 2023', 'Run Time': 'N.A',
-                     'Run Date': '2023-08-20', 'Days Between Update': 0}}
-
-    def __init__(self, session):
+    def __init__(self, session, update_list=None):
         # Change the directory to store the temporary Selenium files to be processed
         os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder')
+        self.counties = []
+        self.towns = []
         self.session = session
         self.engine = Scraper.connect2postgresql()
-        self.run_number, self.last_ran_month, self.last_ran_year = self.latest_event_data()
+        self.event_log = {'Number of Runs': [], 'Run Type': [], 'Latest Available Data': [],
+                          'Run Time': [], 'Run Date': [], 'Days Between Update': []}
+        self.run_number, self.last_ran_month, self.last_ran_year, self.last_run_date = self.latest_event_data()
         self.current_month, self.current_year = self.latest_nj_data()
-        self.__counties = []
-        self.__towns = []
+        self.update_list = update_list
         self.njrdata = {'City': [], 'County': [], 'Quarter': [], 'Month': [], 'Year': [], 'New Listings': [],
-                        'New Listing % Change (YoY)': [], 'Closed Sales': [], 'Closed Sale % Change (YoY)': [],
-                        'Days on Markets': [], 'Days on Market % Change (YoY)': [], 'Median Sales Prices': [],
-                        'Median Sales Price % Change (YoY)': [], 'Percent of Listing Price Received': [],
-                        'Percent of Listing Price Receive % Change (YoY)': [], 'Inventory of Homes for Sales': [],
-                        'Inventory of Homes for Sale % Change (YoY)': [], 'Months of Supply': [],
-                        'Months of Supplies % Change (YoY)': []}
+                        'New Listings % Change (YoY)': [], 'Closed Sales': [], 'Closed Sales % Change (YoY)': [],
+                        'Days on Markets': [], 'Days on Markets % Change (YoY)': [], 'Median Sales Prices': [],
+                        'Median Sales Prices % Change (YoY)': [], 'Percent of Listing Price Received': [],
+                        'Percent of Listing Price Received % Change (YoY)': [], 'Inventory of Homes for Sales': [],
+                        'Inventory of Homes for Sales % Change (YoY)': [], 'Months of Supply': [],
+                        'Months of Supply % Change (YoY)': []}
 
     """ 
     ______________________________________________________________________________________________________________
@@ -53,15 +72,21 @@ class Scraper:
     @staticmethod
     def logger_decorator(original_function):
         def wrapper(*args, **kwargs):
+
+            logger_dir = 'F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Logs'
+
+            if not os.path.exists(logger_dir):
+                os.makedirs(logger_dir)
+
             logger = logging.getLogger(original_function.__name__)
+            filename = original_function.__name__ + ' ' + str(datetime.today().date()) + '.log'
             logger.setLevel(logging.DEBUG)
             logger.propagate = False
             # Create the FileHandler() and StreamHandler() loggers
-            f_handler = logging.FileHandler(
-                original_function.__name__ + ' ' + str(datetime.datetime.today().date()) + '.log')
-            f_handler.setLevel(logging.DEBUG)
+            f_handler = logging.FileHandler(os.path.join(logger_dir, filename))
+            f_handler.setLevel(logging.INFO)
             c_handler = logging.StreamHandler()
-            c_handler.setLevel(logging.INFO)
+            c_handler.setLevel(logging.WARNING)
             # Create formatting for the loggers
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                                           datefmt='%d-%b-%y %H:%M:%S')
@@ -97,9 +122,11 @@ class Scraper:
         :param soup: BeautifulSoup object
         :return: None
         """
-        area = soup.find('select', id="lmuArea").children
-        for obj1 in area:
-            municipality = obj1.get_text()
+
+        area_list = Scraper.city_cleaner(soup)
+
+        for municipality in area_list:
+
             if municipality in ['Select an area...', 'Entire State', '\n']:
                 continue
             else:
@@ -110,11 +137,31 @@ class Scraper:
                         # Do not split the city name if it has '/' in it. It signifies that there is more than 1 city
                         # with that name and shows the county it belongs to
                         # newobj = newobj.split('/')
-                        self.__towns.append(municipality)
+                        self.towns.append(municipality)
                     else:
-                        self.__counties.append(municipality)
+                        self.counties.append(municipality)
                 else:
-                    self.__towns.append(municipality)
+                    self.towns.append(municipality)
+
+    @staticmethod
+    def city_cleaner(soup):
+
+        municipality_pattern = re.compile(r'AreaList\["lmu"] = \[(.*)];')
+        area = soup.find_all('script', {'type': 'text/javascript'})
+        area_list = []
+
+        for item in area:
+            target_str = item.get_text()
+            if 'var AreaList = {};' in target_str:
+                municipality_list = municipality_pattern.search(target_str).group(1)
+
+        municipality_list = municipality_list.split(',')
+
+        for city in municipality_list:
+            cleaned_city = ''.join([i for i in city if i != '"'])
+            area_list.append(cleaned_city)
+
+        return area_list
 
     @staticmethod
     def clean_db(df):
@@ -124,11 +171,18 @@ class Scraper:
         :return:
         """
 
-        convert_dict = {'Year': str}
-        df = df.astype(convert_dict)
         df = df.assign(Dates=df['Month'] + df['Year'])
-        df['Dates'] = pd.to_datetime(df['Dates'].tolist(), format="%B%Y", errors='ignore')
-        df.insert(1, 'Dates', df.pop('Dates'))
+        # df['Dates'] = pd.to_datetime(df['Dates'].tolist(), format="%B%Y", errors='ignore')
+        df['Dates'] = pd.PeriodIndex(df['Dates'], freq='M').strftime('%Y-%b-%d')
+        df = df.astype({'Year': 'string', 'Dates': 'string'})
+        df = df.rename(columns={'City': 'Municipality', 'New Listings % Change (YoY)': 'New Listing % Change (YoY)',
+                           'Closed Sales % Change (YoY)': 'Closed Sale % Change (YoY)',
+                           'Days on Markets % Change (YoY)': 'Days on Market % Change (YoY)',
+                           'Median Sales Prices % Change (YoY)': 'Median Sales Price % Change (YoY)',
+                           'Percent of Listing Price Received % Change (YoY)': 'Percent of Listing Price Receive % Change (YoY)',
+                           'Inventory of Homes for Sales % Change (YoY)': 'Inventory of Homes for Sale % Change (YoY)',
+                           'Months of Supply % Change (YoY)': 'Months of Supplies % Change (YoY)'})
+        df.insert(0, 'Date', df.pop('Dates'))
         df['Percent of Listing Price Received'] = df['Percent of Listing Price Received'] / 100
         df = df[df['County'] != 'N.A']
 
@@ -150,11 +204,23 @@ class Scraper:
         port: the port number that defaults to 5433 if it is not provided.
         '''
 
-        username, base_url, pw = Scraper.get_us_pw('PostgreSQL')
+        user, base_url, psw = Scraper.get_us_pw('PostgreSQL')
 
-        return create_engine(f"postgresql+psycopg2://{username}:{pw}@{base_url}:5432/nj_realtor_data")
+        return create_engine(f"postgresql+psycopg2://{user}:{psw}@{base_url}:5432/nj_realtor_data")
 
-    def create_timeframe(self, outcome, **kwargs):
+    @staticmethod
+    def create_date_object(filename):
+
+        metadata = os.stat(filename)
+        target = time.strptime(time.ctime(metadata.st_mtime))
+
+        year = target.tm_year
+        month = target.tm_mon
+        day = target.tm_mday
+
+        return date(year, month, day)
+
+    def create_timeframe(self, outcome, logger):
 
         timeframe = {}
         months = {
@@ -166,24 +232,66 @@ class Scraper:
             'November': '11', 'December': '12'
             }
 
-    # if outcome is not None:
-        # target_year = outcome['year']
-    # else:
-        # target_year = self.last_ran_year
-        for y in [year for year in range(self.last_ran_year, self.current_year + 1)]:
-            if y == self.last_ran_year:
-                # May have to play with the month numbers
+        if outcome.endswith('.pdf'):
+            temp_var = outcome.rstrip('.pdf').split(' ')
+            municipality = ' '.join(temp_var[:-2])
+            start_year = int(temp_var[-1])
+            start_month = temp_var[-2]
+        else:
+            start_year = int(self.last_ran_year)
+
+        for y in [year for year in range(start_year, int(self.current_year) + 1)]:
+            if y == int(self.last_ran_year):
+                if self.last_ran_month == 'December':
+                    continue
+
                 month_start = list(months.keys()).index(self.last_ran_month) + 1
 
                 timeframe[y] = list(months.keys())[month_start:]
-            # elif y == outcome['year']:
-                # month_start = list(months.keys()).index(self.last_ran_month)
-                # timeframe[y] = list(months.keys())[month_start:]
+
+            # Only time this block is initiated is if the script failed before completion
+            elif outcome.endswith('.pdf'):
+                month_start = list(months.keys()).index(start_month)
+                timeframe[y] = list(months.keys())[month_start:]
+
+            elif y == int(self.current_year):
+                if self.last_ran_month == 'December':
+                    # Starts target download months from January
+                    month_start = list(months.keys()).index('January')
+                else:
+                    month_start = list(months.keys()).index(self.last_ran_month) + 1
+
+                month_end = list(months.keys()).index(self.current_month) + 1
+                timeframe[y] = list(months.keys())[month_start:month_end]
             else:
                 timeframe[y] = list(months.keys())
 
-        # Log the timeframe before returning it
-        return timeframe
+        logger.info(f'Timeframe of data needed:\n{timeframe}')
+        timeframe_years = list(timeframe.keys())
+
+        if outcome.endswith('.pdf'):
+            print(f'NJ Realtor Data will be downloaded from {timeframe[timeframe_years[0]][0]} '
+                  f'{timeframe_years[0]} to {timeframe[timeframe_years[-1]][-1]} {timeframe_years[-1]} '
+                  f'starting from {outcome}')
+            return municipality, timeframe
+
+        else:
+            print(f'NJ Realtor Data will be downloaded from {timeframe[timeframe_years[0]][0]} '
+                  f'{timeframe_years[0]} to {timeframe[timeframe_years[-1]][-1]} {timeframe_years[-1]}')
+            return None, timeframe
+
+    @staticmethod
+    def create_timestamp(text):
+
+        new_time = text.split(',')
+
+        if len(new_time) == 2:
+            t = timedelta(seconds=float(new_time[0].split('=')[1]), microseconds=float(new_time[1].split('=')[1]))
+        elif len(new_time) == 3:
+            t = timedelta(days=float(new_time[0].split('=')[1]), seconds=float(new_time[1].split('=')[1]),
+                          microseconds=float(new_time[2].split('=')[1]))
+
+        return str(t)
 
     @staticmethod
     def create_url_and_pdfname(base_url, year_var, month_var, town_var):
@@ -201,22 +309,21 @@ class Scraper:
 
         if '/' not in city_list:
 
-            new_url = base_url + year_var + '-' + month_var + '/x/' + merged_city_name
-            new_filename = " ".join([' '.join(city_list), Scraper.month2num(month_var), year_var]) + ".pdf"
+            new_url = base_url + str(year_var) + '-' + Scraper.month2num(month_var) + '/x/' + merged_city_name
+            new_filename = " ".join([' '.join(city_list), month_var, str(year_var)]) + ".pdf"
 
             return new_url, new_filename
 
         elif '/' in city_list:
             merged_city_name = '%2F'.join(merged_city_name.split('/'))
             del city_list[city_list.index('/')]
-            new_url = base_url + year_var + '-' + month_var + '/x/' + merged_city_name
-            new_filename = " ".join([' '.join(city_list), Scraper.month2num(month_var), year_var]) + ".pdf"
+            new_url = base_url + str(year_var) + '-' + Scraper.month2num(month_var) + '/x/' + merged_city_name
+            new_filename = " ".join([' '.join(city_list), month_var, str(year_var)]) + ".pdf"
 
             return new_url, new_filename
 
     # Function which scrapes the current month of data available
-    @staticmethod
-    def current_data_avail(soup):
+    def current_data_avail(self, soup):
         """
         Function which accepts a BeautifulSoup object and scrapes the most recent data available to download
         and assigns the value to the current_data class variable
@@ -225,6 +332,7 @@ class Scraper:
         """
         current_results = soup.find('select', id="lmuTime").children
         current_results = list(current_results)
+        self.event_log['Latest Available Data'].append(current_results[2].get_text())
         target = current_results[2].get_text().split(' ')
 
         return target[0], target[1]
@@ -252,7 +360,6 @@ class Scraper:
         self.njrdata['Year'].append(year)
         self.njrdata['City'].append(town)
         self.njrdata['County'].append('N.A')
-        self.njrdata['Month'].append(month)
 
         for category in category_list:
             self.njrdata[category].append(0)
@@ -260,17 +367,17 @@ class Scraper:
 
     # Function which calculates the difference between the current download date and previous date
     # Use this to calculate the average amount of time it takes between new update periods
-    @classmethod
-    def daysuntilupdate(cls):
+    def daysuntilupdate(self):
         """
-        Classmethod which returns a timedelta object that depicts the amount of days between
+        Method which returns a timedelta object that depicts the amount of days between
         the program's last run and current update
+
         :return: delta (timedelta object)
         """
-        current = cls.no_of_runs
+        current = self.run_number
         previous = current - 1
-        current_date = datetime.datetime.now()
-        previous_date = datetime.datetime.strptime(cls.event_log[previous]['Run Date'], "%a %b %d %H:%M:%S %Y")
+        current_date = datetime.now()
+        previous_date = datetime.strptime(self.last_run_date, "%a %b %d %H:%M:%S %Y")
         delta = current_date - previous_date
 
         return delta.days
@@ -297,29 +404,26 @@ class Scraper:
                     logger.warning(f'WARNING! {pdf_name} is possibly a corrupted file')
 
     # This is an instance method because I'm using a static method inside the function which may not be able
-    def event_log_update(self, log_data, logger):
+    def event_log_update(self, logger):
         """
 
         Instance method which updates the event log with runtime data of the most recent NJR10k download.
         Stores the type of downlaod/update which was run, the length of the download runtime, current date and
         length in time between the previous and current program runs
-        :param log_data:
         :param logger: logger function which will return event log to ther logger file
         :return: None
         """
 
         table_name = 'event_log'
-        db = pd.DataFrame(log_data)
+        db = pd.DataFrame(self.event_log)
 
-        if pd.read_sql_table(table_name, self.engine):
-            db.to_sql(table_name, self.engine, if_exists='append', chunksize=1000, index=False)
+        if not pd.read_sql_table(table_name, self.engine).empty:
+            db.to_sql(table_name, self.engine, if_exists='append', index=False)
 
+        print(f'New event log has been saved to the {table_name} in PostgreSQL')
         logger.info(f'New event log has been saved to the {table_name} in PostgreSQL')
 
-
-    # Function which extracts the month, current and previous year, new listing, closing sales, DOM, median sales, etc
-    # Data will then be stored in a dictionary
-    def extract_re_data(self, pdfname, update=None, **kwargs):
+    def extract_re_data(self, pdfname, logger, update=None):
         """
         UPDATE
 
@@ -327,24 +431,27 @@ class Scraper:
         it in the global main_dictionary variable
         :param pdfname: Name of the target pdf
         :param update: Allows for dynamic directory changing if argument is equal to 'Yes'
-        :param kwargs: Keyword argument dictionary which houses the logger function variables
+        :param logger: Keyword argument dictionary which houses the logger function variables
         :return: None
         """
 
-        logger = kwargs['logger']
-
+        os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder')
         # For municipalities with the same name and located in multiple counties,
         # the county name will be unpacked in the town var and needs to be extracted to use as an additional
         # redundancy check
         town, county, month, year = Scraper.parse_pdfname(pdfname)
+
+        # Ensure or create directory for destination of pdf after scraping
+        destination = os.path.join('C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files', year, town)
+
+        if not os.path.exists(destination):
+            os.makedirs(destination)
 
         if update == 'Yes':
             temp_town = town
             if county is not None:
                 temp_town = " ".join([town, county])
             os.chdir(f'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files\\{year}\\{temp_town}')
-        else:
-            os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder')
 
         try:
             with open(pdfname, 'rb') as reader:
@@ -364,49 +471,24 @@ class Scraper:
             self.good_data(town, data, info)
             logger.info(f'The data for {pdfname} has been extracted')
 
-        except PyPDF2._reader.EmptyFileError as efe:
-            logger.exception(f'An Error Has Occured (File Possibly Corrupted):\n{traceback.format_exception(efe)}')
-            logger.info(f'The city of {town} for {month} {year} does not have data')
+            if update is None:
+                shutil.move(os.path.abspath(pdfname), destination)
+
+        except PyPDF2._reader.EmptyFileError:
+            logger.warning(f'The city of {town} for {month} {year} does not have data. File possibly corrupted')
             # If function encounters an empty/corrupted pdf,
             # the data_na function will render all information available for that file equal to zero
             # The generator will then pick up at the next pdf to continue extracting data
             self.data_na(town, month, year)
+            if update is None:
+                shutil.move(os.path.abspath(pdfname), destination)
 
-        except AssertionError as AE:
-            logger.exception(f'An AssertionError Has Occurred:\n{traceback.format_exception(AE)}')
-            logger.info(f'PDF corrupted. The city of {town} for {month} {year} does not have data')
+        except AssertionError:
+            logger.warning(f'The municipality and/or county found in the pdf '
+                           f'does not match {town} {month} {year}. PDF possibly corrupted.')
             self.data_na(town, month, year)
-
-    @logger_decorator
-    def fill_missing_data(self, target_directories: list, main_dict, year_dict, **kwargs):
-        """
-        UPDATE
-
-        :param target_directories:
-        :param main_dict:
-        :param year_dict:
-        :param kwargs:
-        :return:
-        """
-
-        logger = kwargs['logger']
-        f_handler = kwargs['f_handler']
-        c_handler = kwargs['c_handler']
-
-        name = "Fill Missing Data"
-        start_time = datetime.datetime.now()
-
-        for pdf in Scraper.pdf_generator(pdfname=target_directories):
-            self.extract_re_data(pdf, ['No Corrupted Files'], main_dict,year_dict, update='Yes')
-
-        end_time = datetime.datetime.now()
-        run_time = end_time - start_time
-
-        winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
-
-        logger.removeHandler(f_handler)
-        logger.removeHandler(c_handler)
-        logging.shutdown()
+            if update is None:
+                shutil.move(os.path.abspath(pdfname), destination)
 
     @staticmethod
     def find_closed_sales(pdf_text):
@@ -418,7 +500,8 @@ class Scraper:
         variable_list = []
 
         closed_sales_pattern = re.compile(
-            r'Closed\sSales\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
+            r'Closed\sSales\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)'
+            r'\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
         closed_sales_search = list(closed_sales_pattern.findall(pdf_text))
         closed_sales_current = int(closed_sales_search[0][1])
         closed_sales_pc = closed_sales_search[0][2].split(' ')
@@ -442,11 +525,11 @@ class Scraper:
         :return: county name
         """
 
-        county_pattern = re.compile(r'(Atlantic|Bergen|Burlington|Camden|Cape\sMay|Cumberland|Essex|'
+        county_pattern = re.compile(r'(Atlantic|Bergen|Burlington|Camden|Cape May|Cumberland|Essex|'
                                     r'Gloucester|Hudson|Hunterdon|Mercer|Middlesex|Monmouth|Morris|Ocean|'
-                                    r'Passaic|Salem|Somerset|Sussex)\sCounty')
+                                    r'Passaic|Salem|Somerset|Sussex|Union|Warren) County')
 
-        found_county = county_pattern.search(pdftext)
+        found_county = county_pattern.search(pdftext).group()
 
         return found_county
 
@@ -460,7 +543,8 @@ class Scraper:
         variable_list = []
 
         dom_pattern = re.compile(
-            r'Days\son\sMarket\sUntil\sSale\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
+            r'Days\son\sMarket\sUntil\sSale\s(\d{0,3}?)\s(\d{0,3}?)\s'
+            r'(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
         dom_search = list(dom_pattern.findall(pdf_text))
         dom_current = int(dom_search[0][1])
         dom_pc = dom_search[0][2].split(' ')
@@ -487,7 +571,8 @@ class Scraper:
         variable_list = []
 
         inventory_pattern = re.compile(
-            r'Inventory\sof\sHomes\sfor\sSale\s(--|\d{0,3}?)\s(--|\d{0,3}?)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(--|\d{0,3}?)\s(--|\d{0,3}?)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
+            r'Inventory\sof\sHomes\sfor\sSale\s(--|\d{0,3}?)\s(--|\d{0,3}?)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)'
+            r'\s(--|\d{0,3}?)\s(--|\d{0,3}?)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
         inventory_search = list(inventory_pattern.findall(pdf_text))
         inventory_current = inventory_search[0][1]
         if inventory_current != '--':
@@ -515,7 +600,8 @@ class Scraper:
         """
 
         key_metrics_basic_pattern = re.compile(
-            r'Key\sMetrics\s(\d{4})\s(\d{4})\sPercent\sChange\sThru\s\d{1,2}?-\d{4}\sThru\s\d{1,2}?-\d{4}\sPercent\sChange')
+            r'Key\sMetrics\s(\d{4})\s(\d{4})\sPercent\sChange\sThru'
+            r'\s\d{1,2}?-\d{4}\sThru\s\d{1,2}?-\d{4}\sPercent\sChange')
         km_search = list(key_metrics_basic_pattern.findall(pdf_text))
 
         return km_search[0][1]
@@ -530,7 +616,9 @@ class Scraper:
         variable_list = []
 
         median_sales_pattern = re.compile(
-            r'Median\sSales\sPrice\*\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
+            r'Median\sSales\sPrice\*\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})'
+            r'\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})'
+            r'\s(\$\d{1}|\$\d{0,3}?,?\d{0,3}?,\d{1,3})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
         median_sales_search = list(median_sales_pattern.findall(pdf_text))
         median_sales_current = median_sales_search[0][1]
         median_sales_current = int("".join(median_sales_current.split(',')).lstrip('$'))
@@ -557,7 +645,8 @@ class Scraper:
         """
 
         month_pattern = re.compile(
-            r'(January|February|March|April|May|June|July|August|September|October|November|December)\sYear\sto\sDate\sSingle\sFamily')
+            r'(January|February|March|April|May|June|July|August|September|October|November|December)'
+            r'\sYear\sto\sDate\sSingle\sFamily')
 
         return month_pattern.search(pdf_text).group(1)
 
@@ -571,7 +660,8 @@ class Scraper:
         variable_list = []
 
         new_listings_pattern = re.compile(
-            r'New\sListings\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
+            r'New\sListings\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)'
+            r'\s(\d{0,3}?)\s(\d{0,3}?)\s(0.0%|--|[+-]\s\d{0,3}?.\d{0,1}?%)')
         new_listing_search = list(new_listings_pattern.findall(pdf_text))
         new_listings_current = int(new_listing_search[0][1])
         new_listings_pc = str(new_listing_search[0][2]).split(' ')
@@ -598,7 +688,8 @@ class Scraper:
         variable_list = []
 
         percent_lpr_pattern = re.compile(
-            r'Percent\sof\sList\sPrice\sReceived\*\s(\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
+            r'Percent\sof\sList\sPrice\sReceived\*\s(\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(0.0%|--|[+-]'
+            r'\s\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(\d{1,3}?.\d{1}%)\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
         percent_lpr_search = list(percent_lpr_pattern.findall(pdf_text))
         # Divide this by 100 and figure out how to format these to show the percent sign
         percent_lpr_current = float(percent_lpr_search[0][1].rstrip('%'))
@@ -626,7 +717,8 @@ class Scraper:
         variable_list = []
 
         supply_pattern = re.compile(
-            r'Months\sSupply\sof\sInventory\s(--|\d{1,2}?.\d{1})\s(--|\d{1,2}?.\d{1})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)\s(--|\d{1,2}?.\d{1})\s(--|\d{1,2}?.\d{1})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
+            r'Months\sSupply\sof\sInventory\s(--|\d{1,2}?.\d{1})\s(--|\d{1,2}?.\d{1})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)'
+            r'\s(--|\d{1,2}?.\d{1})\s(--|\d{1,2}?.\d{1})\s(0.0%|--|[+-]\s\d{1,3}?.\d{1}%)')
         supply_search = list(supply_pattern.findall(pdf_text))
         supply_current = supply_search[0][1]
         if supply_current != '--':
@@ -702,7 +794,7 @@ class Scraper:
         month = Scraper.find_month(information)
         self.njrdata['Month'].append(month)
         self.njrdata['Quarter'].append(Scraper.find_quarter(month))
-        self.njrdata['Year'].append(Scraper.find_key_metrics(information))
+        self.njrdata['Year'].append(Scraper.find_key_metrics(data))
         self.njrdata['City'].append(city)
         self.njrdata['County'].append(Scraper.find_county(information))
 
@@ -711,67 +803,37 @@ class Scraper:
             self.njrdata[category].append(scraped_data[0])
             self.njrdata[f'{category} % Change (YoY)'].append(scraped_data[1])
 
-    # Used in case the njr10k or the update_njr10k functions are used recursively.
-    # This function will find the latest file downloaded and continue from that point
     def last_downloaded_pdf(self):
         """
-        THIS NEEDS TO BE REFACTORED
+        Used in case the njr10k function is used recursively.
+        This function will find the latest file downloaded and continue from that point
         :return:
         """
 
-        base_path = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder'
+        pdf_download_pattern = re.compile(r'The data for\s(.*\.pdf) has been downloaded')
+        downloads_finished = re.compile(r'All PDFs have been downloaded|All files downloaded')
+        logger_file = Scraper.read_logger()
 
-        for root, dirs, filenames in os.walk(base_path):
-            # print(filenames)
-            # If the length of the filenames variable is less than 2,
-            # that means there are no PDF Files in the folder. The 2 existing files are log files
-            if len(filenames) <= 2:
-                return 'None'
+        if logger_file != 'No logger file available':
+            if downloads_finished.search(logger_file):
+                self.scrape_event_log(logger_file)
+                print('Previously downloaded pdfs have been found. All municipalities have been downloaded')
+                return 'All files downloaded'
             else:
                 try:
-                    i = -1
-                    while not filenames[i].endswith('.pdf'):
-                        # Search the filenames list in reverse order to look for the latest PDF file
-                        i -= 1
-                    else:
-                        target = filenames[i]
-                        # Files are stored in alphabetical order
-                        # Wyckoff Twp are the last pdfs to be downloaded
-                        # If the target pdf name is either equal to Wyckoff Twp Sept for this year or last year
-                        # or Wyckoff Twp of the current month and year
-                        # All files may be downloaded, need to do a second check
-                        check1 = 'Wyckoff Twp September ' + str(int(Scraper.current_data.split(' ')[1]) - 1) + '.pdf'
-                        check2 = 'Wyckoff Twp September ' + Scraper.current_data.split(' ')[1] + '.pdf'
-                        check3 = 'Wyckoff Twp ' + Scraper.current_data + '.pdf'
-                        if target == check1 or target == check2 or target == check3:
-                            print(f'Latest file downloaded is: {target}\nAll files may be downloaded...')
-                            time.sleep(1)
-                            print(f'Moving 2nd phase check...')
-                            time.sleep(1)
-                        else:
-                            print(f'Latest file downloaded is: {target}\nRestarting download process...')
-                            info = target.rstrip('.pdf').split(' ')
-                            town = info[0:len(info) - 2]
-                            if len(town) > 1:
-                                town = ' '.join(town)
-                            else:
-                                town = info[0]
+                    last_download = re.findall(pdf_download_pattern, logger_file)[-1]
+                    print(f'Previously downloaded pdfs have been found. Continuing download from {last_download}')
+                    return last_download
 
                 except IndexError:
-                    # The code tried searching outside the list because it didn't find a PDF file
-                    print(f'There are currently no downloaded PDFs available. Starting NJR10k download...')
-                    return 'None'
-                else:
-                    check4 = 'Wyckoff Twp ' + Scraper.current_data + '.pdf'
-                    if os.path.exists(base_path + '\\' + check4):
-                        print('All files have been downloaded. Now reading previous logger file...')
-                        return 'Read Logger File'
-                    else:
-                        full_town_list = self.__towns
-                        return full_town_list[full_town_list.index(town):]
+                    # No pdfs have been downloaded
+                    print('No logger file available')
+                    return 'No logger file available'
+        else:
+            print('No logger file available')
+            return 'No logger file available'
 
-    @classmethod
-    def latest_event_data(cls):
+    def latest_event_data(self):
         """
         - Accept the self.db_engine as a var since the classmethod cant directly access it
         - latest_event = pd.read_sql_table('event_log', engine=db_engine).loc[-1]
@@ -781,7 +843,24 @@ class Scraper:
         return 1, 09, 2019
         :return:
         """
-        return None, None, None
+
+        table_name = 'event_log'
+
+        try:
+            latest_event = pd.read_sql_table(table_name, self.engine).iloc[-1]
+            last_ran_data = latest_event['Latest Available Data'].split(' ')
+            last_month = last_ran_data[0]
+            last_year = last_ran_data[1]
+
+            return latest_event['Number of Runs'] + 1, last_month, last_year, latest_event['Run Date']
+
+        except IndexError:
+            # The table exists but there's no data in it yet
+            return 1, 'September', 2019, None
+
+        except sqlalchemy.exc.ProgrammingError:
+            # The table doesn't exist. SQLAlchemy raises error
+            return 1, 'September', 2019, None
 
     def latest_nj_data(self):
         """
@@ -789,8 +868,8 @@ class Scraper:
         :return:
         """
 
-        url = 'https://www.njrealtor.com/login.php?rd=10&passedURL=/goto.php?10kresearch=1&skipToken=1'
-        response = self.session.get(url)
+        base_url = 'https://njar.stats.10kresearch.com/reports'
+        response = self.session.get(base_url)
 
         if response.status_code == 200:
             page_source = response.text
@@ -801,6 +880,19 @@ class Scraper:
 
         else:
             response.raise_for_status()
+
+    def load_checkpoint(self, logger):
+
+        previous_wd = os.getcwd()
+        os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
+
+        with shelve.open('NJ Scrapper Data', writeback=True) as saved_data_file:
+            self.njrdata = saved_data_file['Main Dictionary']
+
+            print('Previous data has been loaded')
+            logger.info('Previous data has been loaded')
+
+        os.chdir(previous_wd)
 
     @staticmethod
     def month2num(month):
@@ -821,37 +913,45 @@ class Scraper:
                 if value == month:
                     return name
 
-    # Function which logs into njrealtor to automatically download the pdfs from each city to get ready to scrape
-    @logger_decorator
-    def njr10k(self, timeframe, **kwargs):
+    def njr10k(self, timeframe, logger, municipality=None):
         """
         UPDATE
+        Function which automatically downloads the pdfs from each city to get ready to scrape
 
         :param timeframe:
-        :param kwargs:
+        :param logger:
+        :param municipality
         :return:
         """
 
-        logger = kwargs['logger']
-        start_time = datetime.datetime.now()
-
-        name = 'NJR10k'
+        start_time = datetime.now()
 
         base_url = 'http://njar.stats.10kresearch.com/docs/lmu/'
         params = {'src': 'Page'}
 
-        for key, value in timeframe.keys():
-            target_list = list(product(key, value, self.__towns))
+        for year, months_list in timeframe.items():
+            # If the year equals the first index in the timeframe
+            # keys AND municipality is not None, there was a previous
+            # script interruption and is continuing from where it stopped
+            if year == list(timeframe.keys())[0] and municipality is not None:
+                town_index = self.towns.index(municipality)
+                target_list = list(product(year, months_list, self.towns[town_index + 1:]))
+            else:
+                target_list = list(product([year], months_list, self.towns))
+
             for _, data in zip(trange(len(target_list), desc='Downloaded PDFs'), target_list):
                 pdf_url, new_filename = Scraper.create_url_and_pdfname(base_url, data[0], data[1], data[2])
                 self.download_pdf(pdf_url, new_filename, params, logger)
+                logger.info(f'The data for {new_filename} has been downloaded')
 
-        end_time = datetime.datetime.now()
-        run_time = end_time - start_time
+        logger.info('All files downloaded')
+
+        end_time = datetime.now()
 
         winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
 
-        return name, run_time
+        self.event_log['Run Type'].append('NJR10k')
+        self.event_log['Run Time'].append(str(end_time - start_time))
 
     def pandas2sql(self, logger):
         """
@@ -861,14 +961,15 @@ class Scraper:
         :return:
         """
 
-        table_name = 'nj_realtor_data'
+        table_name = 'nj_realtor_basic'
         db = pd.DataFrame(self.njrdata)
-        db = db.apply(Scraper.clean_db)
-        db.drop_duplicates(subset=['City', 'Month', 'Year'], keep='first', inplace=True, ignore_index=True)
+        db = Scraper.clean_db(db)
+        db.drop_duplicates(subset=['Municipality', 'Month', 'Year'], keep='first', inplace=True, ignore_index=True)
 
-        if pd.read_sql_table(table_name, self.engine):
+        if not pd.read_sql_table(table_name, self.engine).empty:
             db.to_sql(table_name, self.engine, if_exists='append', chunksize=1000, index=False)
 
+        print(f'New NJ Realtor data has been saved to the {table_name} in PostgreSQL')
         logger.info(f'New NJ Realtor data has been saved to the {table_name} in PostgreSQL')
 
     @staticmethod
@@ -913,15 +1014,17 @@ class Scraper:
         base_path = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder'
 
         if pdfname is None:
-            return os.listdir(base_path)
+            return [i for i in os.listdir(base_path) if i != 'PDF Temp Files']
 
         elif type(pdfname) is list:
+            # This pdfname won't be a list of pdf names but a list of municipalities
             filenames = []
 
             if year is None:
                 year = 2019
 
             for year_var, municipality in zip([y for y in range(year, datetime.now().year + 1)], pdfname):
+
                 search_directory = f'C:\\Users\\Omar\\Desktop\\Python Temp Folder' \
                                    f'\\PDF Temp Files\\{year_var}\\{municipality}'
                 try:
@@ -943,139 +1046,171 @@ class Scraper:
         previous_wd = os.getcwd()
         os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
 
-        with shelve.open('NJ Scrapper Data Dictionary_v2', writeback=True) as saved_data_file:
+        with shelve.open('NJ Scrapper Data', writeback=True) as saved_data_file:
             saved_data_file['Main Dictionary'] = self.njrdata
-            logger.info('Saving the data for Main Dictionary, Full Year and Event Log...')
+
+            print('Scraped data has been saved')
+            logger.info('Scraped data has been saved')
+
         os.chdir(previous_wd)
 
-    # A function I can use for debugging purposes.
-    # In the event a failure occurs before reaching the extract_re_data function
-    # I can read the logger file and start again as a midway point
-    def read_logger(self, logger):
+    @staticmethod
+    def read_logger():
         """
         UPDATE
+        A function I can use for debugging purposes.
+        In the event a failure occurs before reaching the extract_re_data function
+        I can read the logger file and start again as a midway point
 
-        :param logger:
         :return:
         """
 
-        base_path = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder'
-        corrupt_pattern = re.compile(r'\d+-\w+-\d+\s\d+:\d+:\d+\s-\supdate_njr10k|njr10k\s-\sWARNING\s-\sWARNING!\s(.*.pdf)\sis\spossibly\sa\scorrupted\sfile')
-        run_name_pattern = re.compile(r'Run Type:\s(\w+\s\w+)')
-        run_time_pattern = re.compile(r"Run Time:\s(.*)")
+        previous_wd = os.getcwd()
+        logger_dir = 'F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Logs'
+        os.chdir(logger_dir)
 
-        possible_corrupted_files = []
+        try:
+            # The index should be -1. Only using -2 for the first run until code is fixed
+            logger_file = sorted(os.listdir(logger_dir), key=Scraper.sortby_date_created)[-1]
+            file_date = Scraper.create_date_object(logger_file)
+            today = date.today()
 
-        for root, dirs, filenames in os.walk(base_path):
+            if abs(today - file_date).days > 5:
+                # This file will be considered too old and therefore, no file is available
+                raise IndexError
 
-            if len(filenames) < 1:
-                return 'None'
-            elif len(filenames) > 1:
-                i = -1
-                # Will find all log files
-                while not filenames[i].endswith('.log'):
-                    i -= 1
+            with open(logger_file, 'r') as file:
+                os.chdir(previous_wd)
+                target_file = file.read()
+
+                if len(target_file) > 1:
+                    # If these patterns are found
+                    return target_file
                 else:
-                    file_pattern = re.compile(r'update_njr10k|njr10k\s\d{4}-\d{2}-\d{2}.log')
-                    while not file_pattern.search(filenames[i]):
-                        i -= 1
-                    else:
-                        target = []
-                        while len(target) < 1:
-                            file = filenames[i]
-                            with open('C:\\Users\\Omar\\Desktop\\Python Temp Folder\\' + file, 'r') as reader:
-                                target = reader.readlines()
-                                i -= 1
-                        else:
-                            break
+                    raise IndexError
 
-        for j in target:
-            if corrupt_pattern.search(j):
-                if corrupt_pattern.search(j).group(1) is not None:
-                    possible_corrupted_files.append(corrupt_pattern.search(j).group(1))
-            elif run_name_pattern.search(j):
-                name = run_name_pattern.search(j).group(1)
-            elif run_time_pattern.search(j):
-                run_time = run_time_pattern.search(j).group(1)
+        except IndexError:
+            os.chdir(previous_wd)
+            return 'No logger file available'
+
+    def scrape_data(self, logger):
+
+        pdf_list = Scraper.pdf_generator(pdfname=self.update_list)
+        for _, pdf in zip(trange(len(pdf_list), desc='Extracted PDFs'), pdf_list):
+            if self.update_list is not None:
+                self.extract_re_data(pdf, logger, update='Yes')
             else:
-                continue
+                self.extract_re_data(pdf, logger)
 
-        return possible_corrupted_files
+        logger.info('All PDFs have been scraped')
+
+        winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
+        # Step 3: Save the downloaded data. Creates a checkpoint in the event of script failure
+        self.process_checkpoint(logger)
+
+    def scrape_event_log(self, text):
+
+        event_log_pattern = re.compile(r"('Number of Runs': \d{1,4}), ('Run Type': .*), "
+                                       r"('Latest Available Data': .*), ('Run Time': .*), ('Run Date': .*), "
+                                       r"('Days Between Update': \d{1,3})")
+        time_pattern = re.compile(r'datetime\.timedelta\((.*)\)')
+
+        for index in range(1, 7):
+            found_targets = event_log_pattern.search(text).group(index).split(':')
+            category = ''.join([i for i in found_targets[0].strip() if i != "'"])
+
+            if category == 'Number of Runs' or category == 'Days Between Update':
+                value = int(found_targets[1].strip())
+            elif category == 'Run Time':
+                if time_pattern.search(text):
+                    value = Scraper.create_timestamp(time_pattern.search(text).group(1))
+                else:
+                    value = ''.join([i for i in found_targets[1].strip() if i != "'"])
+            elif category == 'Latest Available Data':
+                if len(self.event_log['Latest Available Data']) > 0:
+                    continue
+                value = ''.join([i for i in found_targets[1].strip() if i != "'"])
+            else:
+                value = ''.join([i for i in found_targets[1].strip() if i != "'"])
+
+            self.event_log[category].append(value)
+
+        print(f'Event log found in logger file and saved for this run')
 
     @staticmethod
-    def text_message(message_body):
+    def sortby_date_created(file):
         """
 
-        :param message_body:
+        :param file:
         :return:
         """
-        # Your Account SID from twilio.com/console
-        account_sid = 'AC91ccb829e7e47ff05e69d8f96d627f73'
-        # Your Auth Token from twilio.com/console
-        auth_token = "f686fc30c3c9bc2694f11bb5137bb28c"
+        file_stats = os.stat(file)
+        return time.strptime(time.ctime(file_stats.st_mtime))
 
-        twilioclient = Client(account_sid, auth_token)
-
-        message = twilioclient.messages.create(
-            to="+19084683728",
-            from_="+19088609446",
-            body=message_body)
-
-        print(message.body)
-
-    @staticmethod
-    def waiting(sleep_time):
-        """
-
-        :param sleep_time:
-        :return:
-        """
-        sleep_time2 = str(sleep_time.days)
-        sleep_time3 = int(sleep_time2) * 86400  # 86,400 seconds in a day
-        if sleep_time3 > 86400:
-            message_body = f'There is currently no new data available. NJRScrapper will check again in {sleep_time.days} days...'
-            Scraper.text_message(message_body)
-            time.sleep(sleep_time3)
-        else:
-            message_body = f"There is currently no new data available. Will check again tomorrow..."
-            Scraper.text_message(message_body)
-            time.sleep(86400)
-
+    @logger_decorator
     def main(self, **kwargs):
 
         logger = kwargs['logger']
         f_handler = kwargs['f_handler']
         c_handler = kwargs['c_handler']
 
-        event_log = {'Run Type': '', 'Latest Available Data': '',
-                     'Run Time': '', 'Run Date': '', 'Days Between Update': ''}
+        target_pdfs_path = f'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files\\{self.current_year}'
+        shelve_dir = f'F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data'
 
-        event_log['Run Date'] = time.ctime()
-        event_log['Days Between Update'] = Scraper.daysuntilupdate()
         # Step 1a: Check if new data is available
-        assert self.current_month != self.last_ran_month
+        assert self.current_month != self.last_ran_month, 'No new real estate data available'
+        print(f'New data available for {self.current_month + " " + self.current_year}')
 
-        # Step 1b: Download pdfs
+        # Step 1b: Check for a recent logger file and if any download pdfs
+        # are in the target folder
         results = self.last_downloaded_pdf()
-        timeframe = self.create_timeframe(results, **kwargs)
-        event_log['Run Type'], event_log['Run Time'] = self.njr10k(timeframe)
+
+        if results == 'No logger file available' or results.endswith('.pdf'):
+
+            # Ensure the target destination for downloaded pdfs is available
+            # If not then create it
+            if not os.path.exists(target_pdfs_path):
+                os.makedirs(target_pdfs_path)
+
+            self.event_log['Number of Runs'].append(self.run_number)
+            self.event_log['Run Date'].append(time.ctime())
+            self.event_log['Days Between Update'].append(self.daysuntilupdate())
+
+            # If this instance variable is None, all new data is downloaded
+            if self.update_list is None:
+                print('Creating pdf downloading timeframe')
+                municipality_name, timeframe = self.create_timeframe(results, logger)
+                self.njr10k(timeframe, logger, municipality_name)
+            else:
+                # The pdfs are already downloaded and in their respective directories
+                self.event_log['Run Type'].append("Fill Missing Data")
+
+            logger.info(f'New Event Log: {self.event_log}')
 
         # Step 2: Scrape information from pdfs
-        pdf_list = Scraper.pdf_generator()
-        for _, pdf in zip(trange(len(pdf_list), desc='Extracted PDFs'), pdf_list):
-            self.extract_re_data(pdf, **kwargs)
+        if results == 'All files downloaded':
+            # Create function to load the proper shelve file
+            shelve_file = os.path.join(shelve_dir, 'NJ Scrapper Data.dat')
+            if os.path.exists(shelve_file):
+                self.load_checkpoint(logger)
+            else:
+                self.scrape_data(logger)
+        else:
+            self.scrape_data(logger)
 
-        winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
-        # Step 3: Save the downloaded data. Creates a checkpoint in the event of script failure
-        self.process_checkpoint(logger)
         # Step 4: Remove duplicate data (if any) from df and save to sql
         self.pandas2sql(logger)
         # Step 5: Save event_log and data to respective sql dfs
-        self.event_log_update(event_log, logger)
+        self.event_log_update(logger)
 
         logger.removeHandler(f_handler)
         logger.removeHandler(c_handler)
         logging.shutdown()
+
+        message_body = f"NJ Realtor Data for {self.event_log['Latest Available Data']} has been downloaded and" \
+                       f"saved in PostgreSQL"
+
+        return message_body
 
 
 if __name__ == '__main__':
@@ -1089,11 +1224,11 @@ if __name__ == '__main__':
     try:
 
         url = 'https://www.njrealtor.com/login/?rd=10&passedURL=/goto/10k/'
-        url2 = 'https://www.njrealtor.com/ramco-api/web-services/login_POST.php'
+        url1 = 'https://www.njrealtor.com/ramco-api/web-services/login_POST.php'
 
         with requests.Session() as s:
             # create a function/module which returns the njr10k info
-            username, pw = Scraper.get_us_pw('NJRealtor')
+            username, _, pw = Scraper.get_us_pw('NJRealtor')
 
             # payload sent during the HTTP POST
             payload1 = {'rd': '10',
@@ -1104,10 +1239,10 @@ if __name__ == '__main__':
                         'LoginButton': 'Login'}
 
             s.get(url)  # Request to arrive at the log-in page
-            s.post(url2, data=payload1)
+            s.post(url1, data=payload1)
 
             obj = Scraper(s)
-            obj.main()
+            message = obj.main()
 
     except KeyboardInterrupt:
         print()
@@ -1117,11 +1252,4 @@ if __name__ == '__main__':
         # Tell airflow to try again tomorrow
         pass
     else:
-        # Send message that says new data as been scraped and stored
-        pass
-
-
-
-
-
-
+        text_message(message)
