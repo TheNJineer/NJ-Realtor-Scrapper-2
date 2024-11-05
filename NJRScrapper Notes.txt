@@ -1,14 +1,23 @@
 PRIORITY:
 ******I need to subscribe to CJMLS and Bright MLS for all municipal sales data
-
-*** Create a function to load the proper shelve file if a recursive run is initiated
+**** The following data is missing from the database for 2019-2023
+{'SOUTH ORANGE VILLAGE TWP', 'BELVIDERE TOWN', 'CITY OF ORANGE TWP', 'LAKE COMO BORO',
+'PEAPACK-GLADSTONE BORO', 'AVON-BY-THE-SEA BORO', 'ESSEX FELLS BORO', 'PRINCETON', 'CALDWELL BORO',
+'MANTOLOKING BORO', 'WESTFIELD TOWN', 'HO-HO-KUS BORO', 'GLEN RIDGE BORO'} (Done) (Princeton isnt fully acquired for some reason)
+*** Format the geopandas data to match the municipality spelling of the NJ Realtor Data
+*** Update the script to not look at the logger file if this is a "Fill Missing Data Run" (Done)
+*** Sometimes a county pattern wont be found. If thats thw case, save the value as None and fix later (Done)
+*** Create a function to periodically use process_checkpoint() in scrape_data() to
+load the shelve file during recursive runs (DONE)
+*** Delete the shelve file at the end of a successful run (DONE)
+*** After loading the shelve file, check if all files have been scraped, if not run extract_re_data()
 *** Create a function to return the proper logger file in the read_logger(). If a recursive run is initiated the next
 day, the proper file wont be read
-*** Update read_logger to adjust the event logger pattern to find the list items, not string
+*** Update read_logger to adjust the event logger pattern to find the list items, not string (DONE)
 event_log_pattern = re.compile(r"('Number of Runs': \d{1,4}), ('Run Type': .*), "
                                        r"('Latest Available Data': .*), ('Run Time': .*), ('Run Date': .*), "
                                        r"('Days Between Update': \d{1,3})")
-*** See if Twilio is still active, if not, switch to emailing results
+*** See if Twilio is still active, if not, switch to emailing results (DONE)
 ________________________________________________________________________________________________________________
 
 _____________________________________________________________________________________________________________________
@@ -384,5 +393,7 @@ ________________________________________________________________________________
     ***May need to have "logger" as an arg to use in the function
     - CreateZip (properly place logger messages in function)
 45) If the program is killed due to an exception, I want to be able to rerun the program X number of times
+
+
 
 

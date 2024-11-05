@@ -9,195 +9,181 @@ Original file is located at
 
 import streamlit as st
 import pydeck as pdk
+import json
+from pydeck.data_utils.viewport_helpers import compute_view
 import pandas as pd
+import matplotlib.pyplot as plt
 from datetime import date
 from datetime import datetime
 from sqlalchemy import create_engine
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import matplotlib.colors as mcolors
-import plotly.express as px
-import requests
 import geopandas as gpd
 import os
-
-# /content is the default directory of Google Colab. Googel Drive needs to be mounted in order to access the My Drive directory
-from google.colab import drive
-import os
-from PIL import Image
 current_wd = os.getcwd()
-drive.mount('/content/drive')
 
-os.chdir('/content/drive/MyDrive/Colab_Notebooks')
+st.set_page_config(layout='wide')
 
-@st.cache_data
+
 def create_db_connection():
 
-  def get_us_pw(website):
-  # Saves the current directory in a variable in order to switch back to it once the program ends
-  previous_wd = os.getcwd()
-  os.chdir('/content/drive/MyDrive')
+    def get_us_pw(website):
+        # Saves the current directory in a variable in order to switch back to it once the program ends
+        previous_wd = os.getcwd()
+        os.chdir('F:\\Jibreel Hameed\\Kryptonite')
 
-  db = pd.read_excel('get_us_pw.xlsx', index_col=0)
-  username = db.loc[website, 'Username']
-  pw = db.loc[website, 'Password']
-  base_url = db.loc[website, 'Base URL']
+        db = pd.read_excel('get_us_pw.xlsx', index_col=0)
+        username = db.loc[website, 'Username']
+        pw = db.loc[website, 'Password']
+        base_url = db.loc[website, 'Base URL']
 
-  os.chdir(previous_wd)
+        os.chdir(previous_wd)
 
-  return username, base_url, pw
+        return username, base_url, pw
 
-  *username, pw = get_us_pw('PostgreSQL')
-  return create_engine(f"postgresql+psycopg2://{username[0]}:{pw}@{username[1]}:5432/nj_realtor_data")
+    *username, pw = get_us_pw('PostgreSQL')
 
-@st.cache_data
-def load_main_tables(db_engine):
+    return create_engine(f"postgresql+psycopg2://{username[0]}:{pw}@{username[1]}:5432/nj_realtor_data")
 
-  # df1 = pd.read_sql_table('nj_geojson', db_engine)
-  df1 = gpd.read_file('Municipal_Boundaries_of_NJ (2).geojson')
-  df2 = pd.read_sql_table('nj_realtor_final', db_engine)
-
-  df2['Date'] = pd.to_datetime(df2['Date'])
-  # Be sure to remove duplicates before
-  df2.sort_values(by='Date', ascending=True, inplace=True)
-  df2.set_index('Date', inplace=True)
-
-  return df1, df2
 
 @st.cache_data
-def mortgage_rates():
+def load_main_tables(_db_engine):
 
-  url = 'https://api.stlouisfed.org/fred/series/observations'
+    @st.cache_data
+    def prepare_dataframes(re_data, _geo_data):
+        re_data['Municipality'] = re_data['Municipality'].str.upper()
+        re_data['County'] = re_data['County'].str.upper()
+        re_data = re_data.rename(columns={'Municipality': 'MUN', 'County': 'COUNTY'})
 
-  # Parameters for the API request
-  params = {
-      'series_id': 'MORTGAGE30US',  # The series ID for 30-Year Fixed Rate Mortgage
-      'api_key': api_key,
-      'file_type': 'json',  # The format you want the data in (json or xml)
-  }
+        _geo_data['Temp'] = 'COUNTY'
+        _geo_data['COUNTY'] = _geo_data['COUNTY'].str.cat(_geo_data['Temp'], sep=' ')
+        _geo_data.drop(columns='Temp', inplace=True)
 
-  # Check if the request was successful
-  if response.status_code == 200:
-      data = response.json()['observations']
-      df = pd.DataFrame(data)
-      # Convert date and value columns
-      df['date'] = pd.to_datetime(df['date'])
-      df['value'] = pd.to_numeric(df['value'], errors='coerce')
-      mask = df[df['date'] > '08-30-2019']
-      return df.iloc[mask.index]
-  else:
-      print(f'Error:{response.status_code}')
+        return re_data, _geo_data
+
+    previous_wd = os.getcwd()
+    os.chdir('F:\\Real Estate Investing\\JQH Holding Company LLC\\Python Coding for Real Estate')
+    # Locally loading geojson. May need to change later
+
+    df1 = pd.read_sql_table('nj_realtor_basic', _db_engine)
+    df2 = gpd.read_file('Municipal_Boundaries_of_NJ (2).geojson')
+
+    df1, df2 = prepare_dataframes(df1, df2)
+
+    df1['Date'] = pd.to_datetime(df1['Date'])
+    # Be sure to remove duplicates before
+    df1.sort_values(by='Date', ascending=True, inplace=True)
+    # df1.set_index('Date', inplace=True)
+
+    os.chdir(previous_wd)
+
+    return df1, df2
+
 
 def num2month(month):
 
-  month_dict = {
+    month_dict = {
       1: 'January', 2: 'February',
       3: 'March', 4: 'April',
       5: 'May', 6: 'June',
       7: 'July', 8: 'August',
       9: 'September', 10: 'October',
       11: 'November', 12: 'December'
-  }
+    }
 
-  return month_dict[int(month)]
+    if month.isdigit():
+        return month_dict[int(month)]
+    elif month.isalpha():
+
+        for value, name in month_dict.items():
+            if name == month:
+                return value
+
 
 # Create Geopandas object with filtered data
 def create_geopandas_obj(counties='All'):
 
-  year = st.session_state['Date']['Year']
-  month = st.session_state['Date']['Month']
-  df = st.session_state['NJ Realtor Data']
-  geo_df = st.session_state['GeoJSON']
+    year = st.session_state['Date']['Year']
+    month = st.session_state['Date']['Month']
+    df = st.session_state['NJ Realtor Data'].set_index('Date')
+    geo_df = st.session_state['GeoJSON']
 
-  if counties != 'All':
+    if counties != 'All':
 
-    if type(st.session_state['Counties']) == list:
-      df = df[df['COUNTY'].isin(counties)].loc[f'{year}-{month}']
-    elif type(st.session_state['Counties']) == str:
-      df = df[df['COUNTY'] == counties].loc[f'{year}-{month}']
-  else:
-    df = df.loc[f'{year}-{month}']
+        if type(st.session_state['Counties']) == list:
+            df = df[df['COUNTY'].isin(counties)].loc[f'{year}-{month}']
+        elif type(st.session_state['Counties']) == str:
+            df = df[df['COUNTY'] == counties].loc[f'{year}-{month}']
+    else:
+        df = df.loc[f'{year}-{month}']
 
-  # Make sure this merge type still shows the outline of the municiplaities/counties not chosen
-  return geo_df.merge(df, on=['MUN', 'COUNTY'])
+    # Make sure this merge type still shows the outline of the municiplaities/counties not chosen
+    return geo_df.merge(df, on=['MUN', 'COUNTY'])
 
-# 1) Create the choropleth map of the dashboard
-
-def create_choropleth_map(counties='All'):
-  # Use NJREaltors_Data_Analysis as a template on how to properly
-  # Format the columns so the tables can merge
-
-  geo_df = create_geopandas_obj(counties)
-
-  plot = geo_df.explore(
-    column=st.session_state['Current Column'],
-    tooltip='MUN',
-    popup=['MUN', 'Month', 'Median Sales Prices', 'New Listings', 'Closed Sales',
-          'Inventory of Homes for Sales', 'Days on Markets', 'Percent of Listing Price Received',
-          'Median Age', 'Total Population Estimate', 'Crime Rate (Per 100k)',
-          'Unemployment Rate', 'Median Household Income Estimate', 'Per Capita Estimate'],
-    tiles='CartoDB positron',
-    width='75%',
-    height='75%',
-    legend=True,
-    cmap=cmap,
-    name='NJ Municipalities'
-    )
-
-  return plot
 
 # Create choropleth map using PyDeck
-
 def create_PyDeck_map(counties='All'):
 
-  # Create Geopandas dataframe and convert to GeoJSON
-  geo_df = create_geopandas_obj(counties)
-  geo_json = geo_df.to_json()
+    # Create Geopandas dataframe and convert to GeoJSON
+    geo_df = create_geopandas_obj(counties)
+    geo_df.columns = geo_df.columns.str.replace(' ', '_')
+    geo_json = json.loads(geo_df.to_json())
 
-  # Compute the initial view of the map
-  initial_view = pdk.data_itils.compute_view(geo_json)
+    # Compute the initial view of the map
+    initial_view = pdk.ViewState(latitude=39.833851, longitude=-74.871826, zoom=7, max_zoom=16, pitch=45, bearing=0)
 
-  # Define the Layer generated on the map
-  layer = pdk.Layer(
+    column = '_'.join(st.session_state['Current Column'].split(' '))
+    max_value = geo_df[column].max()
+
+    # Define the Layer generated on the map
+    layer1 = pdk.Layer(
       'GeoJsonLayer',
-      geo_json,
-      opacity=0.3,
+      data=geo_json,
+      opacity=0.5,
       stroked=True,
       filled=True,
       extruded=True,
       pickable=True,
       auto_highlight=True,
-      get_elevation = f'properties.{st.session_state['Current Column']}',
-      elevation_scale=0.3
-      get_fill_color=f'[255, (1 - properties.{st.session_state['Current Column']} / max(geo_df[{st.session_state['Current Column']}])) * 255, 100]'
-  )
+      get_elevation=f"properties.{column} / {max_value}",
+      elevation_scale=10000,
+      get_fill_color=f"[255, (properties.{column} / {max_value}) * 255, 100]"
+    )
 
-  map = pdk.Deck(
-      layers = [layer],
+    layer2 = pdk.Layer(
+        'PolygonLayer',
+        data=[[-75.592927, 41.357565], [-73.890363, 38.855893]],
+        stroked=False,
+        # processes the data as a flat longitude-latitude pair
+        get_polygon="-",
+        get_fill_color=[0, 0, 0, 20],
+    )
+
+    map_ = pdk.Deck(
+      layers=[layer2, layer1],
       initial_view_state=initial_view,
       map_style='dark',
       tooltip={
-          'text':'''
+          'text': '''
                   {properties.NAME}
-                  Median Sales Price: {properties.Median Sales Price}
-                  New Listings: {properties.New Listings}
-                  Closed Sales: {properties.Closed Sales}
-                  Inventory of Homes for Sales: {properties.Inventory of Homes for Sales}
+                  Median Sales Price: {properties.Median_Sales_Prices}
+                  New Listings: {properties.New_Listings}
+                  Closed Sales: {properties.Closed_Sales}
+                  Inventory of Homes for Sales: {properties.Inventory_of_Homes_for_Sales}
           '''
       }
 
-  )
+    )
 
-  return map
+    return map_
+
 
 # 3) Function for the creation of real estate metrics
 def real_estate_metrics(counties='All'):
 
-  # I need to calculate the deltas for these metrics as well
-  metrics_dict = {
-      'Median Sales Price': 0,
-      'Median Sales Price (MoM%)': 0,
-      'Median Sales Price (YoY%)': 0,
+    # I need to calculate the deltas for these metrics as well
+    metrics_dict = {
+      'Median Sales Prices': 0,
+      'Median Sales Prices (MoM%)': 0,
+      'Median Sales Prices (YoY%)': 0,
       'New Listings': 0,
       'New Listings (MoM%)': 0,
       'New Listings (YoY%)': 0,
@@ -207,58 +193,56 @@ def real_estate_metrics(counties='All'):
       'Inventory of Homes for Sales': 0,
       'Inventory of Homes for Sales (MoM%)': 0,
       'Inventory of Homes for Sales (YoY%)': 0
-  }
+    }
 
-  year = st.session_state['Date']['Year']
-  month = st.session_state['Date']['Month']
+    year = st.session_state['Date']['Year']
+    month = st.session_state['Date']['Month']
+    df = st.session_state['NJ Realtor Data'].set_index('Date')
 
-  # The month and year filters may be in the form of strs so I may have to cast to int
-  df_current = st.session_state['NJ Realtor Data'].loc[f'{year}-{month}']
-  df_last_month = st.session_state['NJ Realtor Data'].loc[f'{year}-{month - 1}']
-  df_last_year = st.session_state['NJ Realtor Data'].loc[f'{year - 1}-{month}']
+    # The month and year filters may be in the form of strs so I may have to cast to int
+    df_current = df.loc[f'{year}-{month}']
 
-  if counties != 'All':
+    if month == '1':
+        df_last_month = df.loc[f'{int(year) - 1}-12']
+    else:
+        df_last_month = df.loc[f'{year}-{int(month) - 1}']
 
-    if type(st.session_state['Counties']) == list:
-      df_current = df_current[df_current['COUNTY'].isin(counties)]
-      df_last_month = df_last_month[df_last_month['COUNTY'].isin(counties)]
-      df_last_year = df_last_year[df_last_year['COUNTY'].isin(counties)]
-    elif type(st.session_state['Counties']) == str:
-      df_current = df_current[df_current['COUNTY'] == counties]
-      df_last_month = df_last_month[df_last_month['COUNTY'] == counties]
-      df_last_year = df_last_year[df_last_year['COUNTY'] == counties]
+    df_last_year = df.loc[f'{int(year) - 1}-{month}']
 
+    if counties != 'All':
 
-  for key in metrics_dict.keys():
+        if type(st.session_state['Counties']) == list:
+            df_current = df_current[df_current['COUNTY'].isin(counties)]
+            df_last_month = df_last_month[df_last_month['COUNTY'].isin(counties)]
+            df_last_year = df_last_year[df_last_year['COUNTY'].isin(counties)]
 
-    if 'MoM%' and 'YoY%' not in key:
-      if key == 'Median Sales Price':
-        metrics_dict[key] = round(df_current[key].mean(), 2)
-      else:
-        metrics_dict[key] = df_current[key].sum()
+        elif type(st.session_state['Counties']) == str:
+            df_current = df_current[df_current['COUNTY'] == counties]
+            df_last_month = df_last_month[df_last_month['COUNTY'] == counties]
+            df_last_year = df_last_year[df_last_year['COUNTY'] == counties]
 
-    elif 'MoM%' in key:
-      if key == 'Median Sales Price (MoM%)':
-        metrics_dict[key] = round((df_current[key[:-7]].mean() - df_last_month[key[:-7]].mean()) / df_last_month[key[:-7]].mean(), 2)
-      else:
-        metrics_dict[key] = round((df_current[key[:-7]].sum() - df_last_month[key[:-7]].sum()) / df_last_month[key[:-7]].sum(), 2)
+    for key in ['Median Sales Prices', 'New Listings', 'Closed Sales', 'Inventory of Homes for Sales']:
 
-    elif 'YoY%' in key:
-      if key == 'Median Sales Price (YoY%)':
-        metrics_dict[key] = round((df_current[key[:-7]].mean() - df_last_year[key[:-7]].mean()) / df_last_year[key[:-7]].mean(), 2)
-      else:
-        metrics_dict[key] = round((df_current[key[:-7]].sum() - df_last_year[key[:-7]].sum()) / df_last_year[key[:-7]].sum(), 2)
+        if key == 'Median Sales Prices':
+            metrics_dict[key] = round(df_current[key].mean(), 2)
+            metrics_dict[f'{key} (MoM%)'] = round((df_current[key].mean() - df_last_month[key].mean()) / df_last_month[key].mean(), 2) * 100
+            metrics_dict[f'{key} (YoY%)'] = round((df_current[key].mean() - df_last_year[key].mean()) / df_last_year[key].mean(), 2) * 100
+        else:
+            metrics_dict[key] = df_current[key].sum()
+            metrics_dict[f'{key} (MoM%)'] = round((df_current[key].sum() - df_last_month[key].sum()) / df_last_month[key].sum(), 2) * 100
+            metrics_dict[f'{key} (YoY%)'] = round((df_current[key].sum() - df_last_year[key].sum()) / df_last_year[key].sum(), 2) * 100
 
-  return metrics_dict
+    return metrics_dict
+
 
 # Callback function to update checkboxes
 def status_callback():
 
-    column_names = ['Median Sales Price', 'New Listings', 'Closed Sales', 'Inventory of Homes for Sales']
+    column_names = ['Median Sales Prices', 'New Listings', 'Closed Sales', 'Inventory of Homes for Sales']
 
     # Ensure only one checkbox is selected at a time
-    if st.session_state['Median Sales Price']:
-        st.session_state['Current Column'] = 'Median Sales Price'
+    if st.session_state['Median Sales Prices']:
+        st.session_state['Current Column'] = 'Median Sales Prices'
 
     elif st.session_state['New Listings']:
         st.session_state['Current Column'] = 'New Listings'
@@ -266,27 +250,30 @@ def status_callback():
     elif st.session_state['Closed Sales']:
         st.session_state['Current Column'] = 'Closed Sales'
 
-    elif st.session_state['Inventory']:
+    elif st.session_state['Inventory of Homes for Sales']:
         st.session_state['Current Column'] = 'Inventory of Homes for Sales'
 
-    for name in [i for i in column_names if i != current_status['column']]:
-      st.session_state[column] = False
+    for name in [i for i in column_names]:
+        if name == st.session_state['Current Column']:
+            st.session_state[name] = True
+        else:
+            st.session_state[name] = False
 
     # Ensure the correct counties are displayed in the choropleth map and metrics
     if st.session_state['Counties'] == 'All Counties':
-      counties = 'All'
+        counties = 'All'
     elif st.session_state['Counties'] == 'North Jersey':
-      counties = ['Bergen County', 'Essex County', 'Hudson County', 'Morris County',
-                  'Passaic County', 'Sussex County', 'Warren County']
+        counties = ['Bergen County', 'Essex County', 'Hudson County', 'Morris County',
+                    'Passaic County', 'Sussex County', 'Warren County']
     elif st.session_state['Counties'] == 'Central Jersey':
-      counties = ['Hunterdon County', 'Union County', 'Mercer County',
-                  'Middlesex County', 'Monmouth County', 'Somerset County',
-                  'Ocean County']
+        counties = ['Hunterdon County', 'Union County', 'Mercer County',
+                    'Middlesex County', 'Monmouth County', 'Somerset County',
+                    'Ocean County']
     elif st.session_state['Counties'] == 'South Jersey':
-      counties = ['Burlington County', 'Camden County', 'Cumberland County',
-                  'Gloucester County', 'Salem County']
+        counties = ['Burlington County', 'Camden County', 'Cumberland County',
+                    'Gloucester County', 'Salem County']
     else:
-      counties = st.session_state['Counties']
+        counties = st.session_state['Counties']
 
     # Update the displayed metrics
     st.session_state['Metrics'] = real_estate_metrics(counties)
@@ -297,66 +284,108 @@ def status_callback():
     # Update the line graph data
     st.session_state['Line Graph Data'] = create_line_graph(counties)
 
+
 # 7) Create line chart for Inventory, Closed Sales, New Listings
 def create_line_graph(counties='All'):
 
-  df = st.session_state['NJ Realtor Data']
+    df = st.session_state['NJ Realtor Data']
 
-  if counties != 'All':
+    if counties != 'All':
 
-    if type(st.session_state['Counties']) == list:
-      df = df[df['COUNTY'].isin(counties)]
-    elif type(st.session_state['Counties']) == str:
-      df = df[df['COUNTY'] == counties]
+        if type(st.session_state['Counties']) == list:
+            df = df[df['COUNTY'].isin(counties)]
+        elif type(st.session_state['Counties']) == str:
+            df = df[df['COUNTY'] == counties]
 
-  df = df[['Date', 'New Listings', 'Closed Sales', 'Inventory of Homes for Sales']]
-  df = df.sort_values(by='Date')
-  group = df.groupby('Date').sum()
-  group.reset_index(names='Date')
+    df = df[['Date', 'New Listings', 'Closed Sales', 'Inventory of Homes for Sales']]
+    df = df.sort_values(by='Date')
+    group = df.groupby('Date').sum()
+    group.reset_index(names='Date')
 
-  return group.reset_index(names='Date')
+    return group.reset_index(names='Date')
 
-"""# Creating the Dashboard"""
+
+def create_bar_chart(counties='All'):
+
+    year = st.session_state['Date']['Year']
+    month = st.session_state['Date']['Month']
+    df = st.session_state['NJ Realtor Data'].set_index('Date')
+    df = df.loc[f'{year}-{month}']
+
+    if counties != 'All':
+
+        if type(st.session_state['Counties']) == list:
+            df = df[df['COUNTY'].isin(counties)]
+        elif type(st.session_state['Counties']) == str:
+            df = df[df['COUNTY'] == counties]
+
+    # df.reset_index(inplace=True)
+    df = df[['MUN', st.session_state['Current Column']]]
+    df = df.sort_values(by=st.session_state['Current Column'], ascending=False)[:25]
+
+    return df
+
+
+def create_pie_chart(counties='All'):
+
+    fig, axs = plt.subplots()
+    year = st.session_state['Date']['Year']
+    month = st.session_state['Date']['Month']
+    df = st.session_state['NJ Realtor Data'].set_index('Date')
+    df = df.loc[f'{year}-{month}']
+
+    if counties != 'All':
+
+        if type(st.session_state['Counties']) == list:
+            df = df[df['COUNTY'].isin(counties)]
+        elif type(st.session_state['Counties']) == str:
+            df = df[df['COUNTY'] == counties]
+
+    group = df.groupby('COUNTY')[st.session_state['Current Column']].sum()
+    axs.pie(group.values, labels=group.index, autopct='%1.1f%%', textprops={'size': 'smaller'})
+
+    return fig
+
 
 # When loading the database, be sure to change the date column to the index
 # Use pd.to_datetime on the column as well
 # Be sure to order the database by date
 
-'''
-------------------------------------------------------------------------------------------
-                      Dashboard Initializations
-------------------------------------------------------------------------------------------
-'''
+# '''
+# ------------------------------------------------------------------------------------------
+#                       Dashboard Initializations
+# ------------------------------------------------------------------------------------------
+# '''
 # Load Dashboard dependencies
-st.title("NJ Realtor Project Dashboard")
+
+
+st.header("NJ Realtor Project Dashboard", divider='grey')
 st.sidebar.markdown("NJ Realtor Project Dashboard")
 
 if 'NJ Realtor Data' not in st.session_state:
-  st.session_state['db_engine'] = create_db_connection()
-  st.session_state['GeoJSON'], st.session_state['NJ Realtor Data'] = load_main_tables(st.session_state['db_engine'])
+    engine = create_db_connection()
+    st.session_state['NJ Realtor Data'], st.session_state['GeoJSON'] = load_main_tables(engine)
 
-parsed_date = str(st.session_state['NJ Realtor Data'].index.max()).split('-')[0:2]
+parsed_date = str(st.session_state['NJ Realtor Data']['Date'].max()).split('-')[0:2]
 county_groups = ['All Counties', 'North Jersey', 'Central Jersey', 'South Jersey']
-county_groups.extend(st.session_state['NJ Realtor Data']['COUNTY'].unique())
+nj_counties = st.session_state['NJ Realtor Data']['COUNTY'].unique()
+county_groups.extend(sorted([i.title() for i in nj_counties]))
 
 if 'Date' not in st.session_state:
-  st.session_state['Date'] = {'Year': parsed_date[0], 'Month': parsed_date[1]}
+    st.session_state['Date'] = {'Year': parsed_date[0], 'Month': parsed_date[1]}
 
 if 'Month' not in st.session_state:
-  st.session_state['Month'] = num2month(parsed_date[1])
+    st.session_state['Month'] = num2month(parsed_date[1])
 
 if 'Current Column' not in st.session_state:
-  st.session_state['Current Column'] = 'Median Sales Price'
+    st.session_state['Current Column'] = 'Median Sales Prices'
 
 # Initialize checkboxes in session state
-if 'Median Sales Price' not in st.session_state:
-    st.session_state['Median Sales Price'] = True
-if 'New Listings' not in st.session_state:
+if 'Median Sales Prices' not in st.session_state:
+    st.session_state['Median Sales Prices'] = True
     st.session_state['New Listings'] = False
-if 'Closed Sales' not in st.session_state:
     st.session_state['Closed Sales'] = False
-if 'Inventory' not in st.session_state:
-    st.session_state['Inventory'] = False
+    st.session_state['Inventory of Homes for Sales'] = False
 
 # Intialize the value of the county select dropdown menu
 if 'Counties' not in st.session_state:
@@ -368,86 +397,88 @@ if 'Metrics' not in st.session_state:
 
 # Initialize the latest choropleth map for all counties
 if 'Map' not in st.session_state:
-    st.session_state['Map'] = create_choropleth_map()
+    st.session_state['Map'] = create_PyDeck_map()
 
 # Initialize the line graph data
 if 'Line Graph Data' not in st.session_state:
     st.session_state['Line Graph Data'] = create_line_graph()
 
-'''
-------------------------------------------------------------------------------------------
-                      Dashboard Layout
-------------------------------------------------------------------------------------------
-'''
+# Initialize the pie chart
+if 'Pie Chart' not in st.session_state:
+    st.session_state['Pie Chart'] = create_pie_chart()
 
-category_list = ['Median Sales Price', 'New Listings', 'Closed Sales', 'Inventory of Homes for Sales']
+# '''
+# ------------------------------------------------------------------------------------------
+#                       Dashboard Layout
+# ------------------------------------------------------------------------------------------
+# '''
 
-# Create two containers on one page
-left_col, right_col = st.columns(2)
-left_subcol, right_subcol = st.columns(2), st.columns(1)
-
-# Create the columns for the data matrix
-median_sales = st.columns(3)
-inventory = st.columns(3)
-new_listings = st.columns(3)
-closed_sales = st.columns(3)
+category_list = ['Median Sales Prices', 'New Listings', 'Closed Sales', 'Inventory of Homes for Sales']
 
 # Create the title for the dashboard
 if st.session_state['Counties'] == 'All Counties':
-  location = 'NJ Municipalities'
+    location = 'NJ Municipalities'
 elif st.session_state['Counties'] == 'North Jersey':
-  location = 'North Jersey Municipalities'
-elif st.sesstion_state['Counties'] == 'Central Jersey':
-  location = 'Central Jersey Municipalities'
+    location = 'North Jersey Municipalities'
+elif st.session_state['Counties'] == 'Central Jersey':
+    location = 'Central Jersey Municipalities'
 elif st.session_state['Counties'] == 'South Jersey':
-  location = 'South Jersey Municipalities'
+    location = 'South Jersey Municipalities'
 else:
-  location = f'{st.session_state["Counties"]}'
+    location = f'{st.session_state["Counties"]}'
+
+# Create the columns for the data matrix
+top_row = st.columns(4)
+bottom_row = st.columns(4)
+
+for col, category in zip(top_row, category_list):
+    if category == 'Median Sales Prices':
+        col.metric(label=f'{category}', value=f"${st.session_state['Metrics'][f'{category}']}",
+                   delta=f"{st.session_state['Metrics'][f'{category} (MoM%)']}%")
+    else:
+        col.metric(label=f'{category}', value=st.session_state['Metrics'][f'{category}'],
+                   delta=f"{st.session_state['Metrics'][f'{category} (MoM%)']}%")
+
+for col, category in zip(bottom_row, category_list):
+    col.metric(label=f'{category} YoY%', value=st.session_state['Metrics'][f'{category} (YoY%)'])
+
+with st.container():
+    st.write(f'Choropleth Map of {location}')
+    st.pydeck_chart(st.session_state.Map, use_container_width=True)
+
+with st.container():
+    st.write(f'Time Series of Closed Sales, Inventory, and New Listings for {location}')
+    st.line_chart(st.session_state['Line Graph Data'], x='Date')
+
+st.sidebar.selectbox('Select Counties', county_groups, index=0, key='Counties', on_change=status_callback)
+
+# Create checkboxes and dropdown menu for map and data filters
+for category in category_list:
+    st.sidebar.checkbox(f'{category}', key=f'{category}', on_change=status_callback)
+
+# Create two containers on one page
+left_col, right_col = st.columns(2)
 
 # Place the choropleth map inside the left container
 with left_col:
-  st.header(f'Choropleth Map of {location}')
-  st.pydeck_chart(st.session_state['Map'], use_container_width=True)
 
-  # Create checkboxes and dropdown menu for map and data filters
-  with left_subcol[0]:
-    st.checkbox('Median Sales Price', key='Median Sales Price', value=True,
-            on_change=status_callback)
-    st.checkbox('New Listings', key='New Listings', value=False,
-            on_change=status_callback)
+    st.write(f"Top 25 Municipalities with Highest {st.session_state['Current Column']}")
+    st.bar_chart(create_bar_chart(), x='MUN', y=st.session_state['Current Column'], x_label='Municipalities')
 
-  with left_subcol[1]:
-    st.checkbox('Closed Sales', key='Closed Sales', value=False,
-            on_change=status_callback)
-    st.checkbox('Inventory of Homes for Sales', key='Inventory', value=False,
-            on_change=status_callback)
-
-# Place the data matrix and line graph in the top and bottom of the right
-# column respectively
 with right_col:
-    st.write(f'Metrics for {location}')
-    for category, col in zip(category_list, [median_sales, new_listings, closed_sales, inventory]):
-      col[0].metric(label=category, value=st.session_state['Metrics'][category], delta=st.session_state['Metrics'][f'{category} MoM%'])
-      col[1].metric(label=f'{category} MoM%', value=st.session_state['Metrics'][f'{category} MoM%'])
-      col[2].metric(label=f'{category} YoY%', value=st.session_state['Metrics'][f'{category} YoY%'])
 
     with st.container():
-      st.line_chart(st.session_state['Line Graph Data'], x='Date')
+        st.write(f"Total {st.session_state['Current Column']} By County")
+        st.pyplot(st.session_state['Pie Chart'])
 
-    righ_subcol[0]..selectbox('Select Counties', county_groups, index=0, key='Counties', on_change=status_callback)
-
-with st.expander(f'Overview of the markey for {st.session_state['Month']} {st.session_state['Date']['Year']}'):
-  st.write('''
-        Write blurb here about the use and functionality of the dashboard.
-  ''')
+with st.expander(f"Overview of the markey for {st.session_state['Month']} {st.session_state['Date']['Year']}"):
+    st.write('''Write blurb here about the use and functionality of the dashboard.''')
 
 with st.expander('About NJ Realtor Dashboard'):
-  st.write('''
-        Write blurb here about the use and functionality of the dashboard.
-  ''')
+    st.write('''Write blurb here about the use and functionality of the dashboard.''')
 
-  '''
-------------------------------------------------------------------------------------------
-                      Dashboard Legalities
-------------------------------------------------------------------------------------------
-'''
+# '''
+# ------------------------------------------------------------------------------------------
+#                       Dashboard Legalities
+# ------------------------------------------------------------------------------------------
+# '''
