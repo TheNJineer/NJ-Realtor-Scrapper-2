@@ -59,12 +59,8 @@ The pipeline operates as follows:
 
 <b>Exploratory Data Analysis & Data Visualization</b>
 <div id="header" align="center">
-  <br>What is the Median Sales Price of the hottest/coldest cities?</br>
+  <br>What is the Median Sales Price of a NJ Home Since 2019?</br>
   <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Median%20Sales%20Prices%20by%20Year.jpeg" width="500"/>
-</div>
-<div id="header" align="center">
-  <br>What is the Average Median Household Income Estimates by County for 2022?</br>
-  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Avg%20Median%20Household%20Income%20Estimate%20by%20County%20in%202022.jpeg" width="500"/>
 </div>
 <div id="header" align="center">
   <br>What is the Average Median Gross Rent by County for 2022?</br>
@@ -73,14 +69,6 @@ The pipeline operates as follows:
 <div id="header" align="center">
   <br>What is the best month to sell your home?</br>
   <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Closed%20Sales%20by%20Month%20(All%20Time).jpeg" width="1500"/>
-</div>
-<div id="header" align="center">
-  <br>Affordability Scatter Plots</br>
-  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Affordability%20Scatter%20Plots.jpeg" width="1500"/>
-</div>
-<div id="header" align="center">
-  <br>Choropleth Maps of New Jersey</br>
-  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Static%20Choropleth%20Map%20Matrix.jpeg" width="3000"/>
 </div>
 
 <b>Machine Learning</b>
