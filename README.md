@@ -21,10 +21,18 @@ The current system (or lack thereof) for real estate agents to analyze their loc
 
 <b>Data Sources:</b>
 - NJ Realtor Association
+- Wikipedia
+- USPS (Zipcode Lookup) / UnitedStatesZipCodes.org
 - US Cenus for the 2019-2022 Per Capita Income
 - US Cenus for the 2019-2022 Median Household Income
+- US Cenus for the 2019-2022 Median Age
+- US Cenus for the 2019-2022 Home Ownership Rates
+- US Cenus for the 2019-2022 Commuting Data
+- County Business Patterns (CBP) by Zipcode
 - FBI Uniform Crime Reporting Program (UCRP)
 - NJ Deptartment of Labor for 2019-2023 Population Estimates
+- NJ Deptartment of Labor for 2019-2023 General Tax Rates
+- NJ Deptartment of Labor for 2019-2023 Average Property Tax Bills
 - NJ Deptartment of Labor for 2019-2023 Unemployment Rates
 - U.S Environmental Protection Agency Air Quality Index (AQI)
 - School Digger Best High School Rankings (for NJ)
@@ -39,3 +47,14 @@ The pipeline operates as follows:
 5. Initiate data cleaning and transformations
 6. Store DataFrame in PostgreSQL
 7. Schedule monthly data aggregation with Apache Airflow
+
+<b>Data Cleaning, Enrichment, Imputations and Transformations</b>
+- Used BeautifulSoup and Requests to scrape all municipality's latitudinal and longitudunal information to merge with real estate data
+- Used BeautifulSoup and Requests to scrape of NJs Census Designated Places (CDPs) and convert names to host cities
+- Transformed all of US Census Data from JSON to Pandas Dataframes
+- School names cleaned to match their host municipality. Municipality's School Rank was averaged if multiple school systems existed
+- Transformed FBI Crime Data from unconventional xlsx and pdf formats to Pandas Dataframes
+- Used the Census Bureau API to request CBP zipcode data. Transformed and filtered data to save NJ Zipcodes early. Use the full zipcode database to match NJ zipcodes with their municipality name
+- Air Quality Index Data was transformed and filtered NJ Counties only. Data was then converted from a daily to a yearly timeframe
+- After merging all dataframes, necessary transformations (added constants, log, exp and power) were applied to ensure data was as close to normally distributed as possible 
+
