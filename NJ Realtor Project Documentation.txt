@@ -1,0 +1,68 @@
+The Problem:
+As a real estate agent in the state of NJ, an investor and a data analyst, I'm highly interested in various amounts of sales
+data this market produces for residential, multi-family and land properties. Fortunately as an agent, the New Jersey Association of Realtors
+aggregate these market statistics and provide them in individual pdfs for all 21 counties and 564 municipalities in New Jersey. Ideally, sifting through the data
+for a few target municipalities every month wouldn't be an issue; after a few clicks I'd have all the information I need to determine how some local markets
+ are operating and how to make decisions in those markets going forward. However, because I'm interested in the total market's data and keeping track of it on a on a monthly basis,
+I needed to find a way to properly collect this data to analyze different market statistics to make data-driven decisions. 
+
+The Objective:
+Create a process using Python which can automatically log in to my agent portal, download and scrape each pdf for all 564 municipalities, clean and store the data then organize the
+residual pdfs into folders according to their respective counties and municipalities. Store data in Excel and PostgreSQL databases for further analysis.
+Determine the median county's contribution to the state's overall closed sales, the counties which contribute the most to New Jersey's overall closed sales and what percentage do the
+top municipalities contribute to that counties overall sales each quarter.
+
+The Process:
+
+General Purpose:
+- Use object-oriented programming (OOP) to create a class to house the functions needed to run the whole process
+- Create a logger decorator to inject a logger function into any function where needed
+- Create a main function decorator to make sure the process only runs when new data is available on the agent portal
+- Use the shelve module to store a process run log, latest data available, run time, run date and the amount of days between each data release
+- Use the zipfile module to create a zip file containing all the year's pdf files after the December data is extracted
+
+Data Extraction:
+- Use Session.Requests to maintain access to the agent portal to download files. Without it, the program will emit an error
+- Use BeautifulSoup to confirm when new market data is available on the agent portal
+- Use the Requests module to properly parse, create and request the http web address where each individual municipality pdf
+    - Create a function which looks for an inpromptu checkpoint in the current pdf file's directory which allows the download process to start again at the next
+    file in the event a program error is encountered
+- Create a new pdf file and stream the binary data into the new file
+    - The available data spanned all the way back to September 2019. The very first run of this process would gather four years
+    worth of data. While creating this process, I realized that there was a possibility for the pdf files to be corrupted. The corruption
+    showed up as having last month's data being saved as being collected for the current month or the wrong county or municipality is saved
+    in the pdf
+    - If pdf is considered corrupted, store pdf name in a list variable for later processing
+- Create a function using PyPDF2 to standardize the process opening, reading and extracting the contents of a pdf and store in a dictionary variable
+    - Contents extracted were the Municipality, County, Year, Closed Sales, Days on the Market, Inventory, Median Sales,
+    New Listings, Percentage of Listing Price Received, Months of Supply and the YoY percentage change for each category
+    - Assert property datatypes for each respective variable so minimal data cleaning is needed when converting to a pandas dataframe
+- Use an assert statement to make sure the month and year of the file name are the same values found in the pdf contents
+- Create a function which redundantly checks the current pdf's variable values against previously stored vectors (rows) of the dictionary.
+  If current pdf is found to be corrupted, the file name is stored in a list for later processing and all associated variables set to 0 before being
+  stored in the dictionary
+
+Data Cleaning:
+- Use the pandas module to convert the Python dictionary into a dataframe
+- Combine the 'Month' and 'Years' column in order to create a datetime pandas series for future time series analysis
+- Divide the 'Percent of Listing Price Received' column by 100 to convert all values into percentages
+- Filter the dataframe to keep all rows which do not equal 'N.A'
+
+Data Storage:
+- Use pandas to save the dataframe into an Excel file for further analysis
+- Use pandas to save dataframe into PostgreSQL database for further analysis and data querying
+    - Create connections to PostgreSQL using SQLAlchemy and Psycopg2
+    - Psycopg2 would be used to create the database table if it doesn't already exist
+    - Pandas and SQLAlchemy will be used to store the dataframe in PostgreSQL and return SQL queries into pandas dataframes
+
+Data Visualization:
+- Create a function which uses Matplotlib to create line graphs for every city, grouped by its county for each tracked category
+- Create a function which uses geopandas to create a cloropleth map for NJ and display the distribution of values across the state
+- Use Seaborn to create pairplot to determine if there are any noticeable trends in the data between each category
+
+Future Analysis:
+- Use data to build a model that can predict median housing prices in each municipality using metrics
+such as New Listings, Closed Sales, Days on Market, Percent of Listing Price Received, Inventory of Homes , Months of Supply.
+Feed this model's output into another model which can determine the ARV of a renovated home.
+
+

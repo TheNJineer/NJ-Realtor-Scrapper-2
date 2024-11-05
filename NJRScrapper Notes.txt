@@ -1,78 +1,390 @@
 PRIORITY:
 ******I need to subscribe to CJMLS and Bright MLS for all municipal sales data
-122) cls.state_dictionary doesn't have all of the municipalities and will cause error when looking up cities with '/' in them
-    because they dont currently exists. Fix this (pull from the most updated fill after updating the dictionary) (DONE)
-    ****if find_county produces an error, use the county name from the pdf (DONE)
-    ****August 2023 data will cause error because the county name wasnt captured (DONE)
-123) Some of the 2023 pdfs dont display the county and create an error. How do I get around this? (DONE)
-124) Make sure the NJScrapper main function is updated to account for the arg updates made for extract_re_data, good_data, duplicate_check, etc
-117) ******extract_re_data isn't currently getting data for Union Twp, NJ (Union County) or Union Twp, NJ (Hunterdon County) (DONE)
-    - Change the if '/' in town logic in extract_pdf. Thats why pdfs arent getting downloaded. Add 'elif town.split('/')[0] != check_city' (DONE)
-    - Remove the coding block from 801 - 811 from each if/elif block to make the code much cleaner (DONE)
-    - Add the redunancy county check to "if type(town) is list logic" (DONE)
-        - Add an assertion error or add logic to let program keep going? (DONE)
-    - Create another function for the temp_town and temp_county check (DONE)
-    - Test if this new code works
-118) Refactor njr10k, good_data
-    - Create a new function to parse and combine the correct url3 and new_filename (DONE)
-    - Create a new function that downloads the pdf from NJR 10k (DONE)
-    - Create new functions for month, key_metrics, new_listings, closed_sales, DOM, median_sales, percent_lpr, inventory, supply (DONE)
-        - Make sure to include logic for each individual function that handles full year data too. month=None but if month='December' run fy code block as well (DONE)
-121) Refactor update_njr10k and corrupted_files using the new function from above
-    - Also, take out the try-except blocks from these functions. There are no known exceptions we want to allow in these functions
-115) pandas2excel no longer uploads separate dbs by year, just an all months and all years db (DONE)
-    - Also add logic to add new data to previous file and save under new name rather than saving the whole python dict to a new file every time
-    - Make sure to clean the python dicts of all counties == 'N/A' (drop them)
-    - May need to add a depreciation warning on this function
-71) Function that sends the data to an SQL Database
-    - Create pandas2sql
-        - Updates the current table of data already located in SQL
-    - Create sql2excel
-        - Transforms the SQL database into an Excel file specifically to create pivot tables
-    - Create sql2pandas
-        - Transforms the SQL database into a Pandas object to query and use in tkinter widget
-120) Update matplotlines to read from SQL  than from Excel
-116) ***Learn to use Pandas to create Pivot tables.
-112) Refactor matplot_lines(filename, **kwargs) to create a figure for each city and will house
- the axes for the 5 categories from 2019. Will no longer create separate charts for current year
-    - Fix the dates format on the axis (DONE)
-    - Change the colors of the plot lines for each year
-    - Change the plot x-axis to display 12 months and the a line graph which display a diffrent year all on the same plot
-    - Plot the average of each category on the same plot in a black line (DONE)
-113) Create a matplotlib chart formatter function to make main function less cluttered (DONE)
-114) Function that stores all created matplotlib PDFs to an No-SQL Database
-106) Create an nj10k function which can take the city, county and **kwargs for args and download/extract pdfs
-    - Create function which updates main_dictionary and full_year for missing data (DONE)
-    - Needed for when I need to download pdfs for one city or cities in particular (DONE)
-    - city arg can be a str or list object. Change code based on what the type is (DONE)
-    *** Reload the dictionary using the shelve model (DONE)
-    *** Refactor the pdf_generator code to find the files I want to download (DONE)
-    *** Run thorugh pdf_extractor (DONE)
-    *** Resave the dictionares in the shelve models
-109) Add doc-strings to all the methods of the class
-92) Create a method call quarterly_stats that runs the matplot_lines and njr10k_stats/njr10k_update_stats,
-    cloropleth, histograms and Seaborn
-86) Create a function to upload the GIS Data and create cloropleth maps and timeseries maps:
-    - Current maps arent showing, I may need to reorder the target_df as the same index as the geopandas
-105) Handle this warning:
-F:/Python 2.0/Projects/Real Life Projects/OG NJRScrapper Non-Ascynio 10-4-23.py:1119: UserWarning: Boolean Series key will be reindexed to match DataFrame index.
-  target1_df = temp1_df1[temp_df1['City'] == city]
+**** The following data is missing from the database for 2019-2023
+{'SOUTH ORANGE VILLAGE TWP', 'BELVIDERE TOWN', 'CITY OF ORANGE TWP', 'LAKE COMO BORO',
+'PEAPACK-GLADSTONE BORO', 'AVON-BY-THE-SEA BORO', 'ESSEX FELLS BORO', 'PRINCETON', 'CALDWELL BORO',
+'MANTOLOKING BORO', 'WESTFIELD TOWN', 'HO-HO-KUS BORO', 'GLEN RIDGE BORO'} (Done) (Princeton isnt fully acquired for some reason)
+*** Format the geopandas data to match the municipality spelling of the NJ Realtor Data
+*** Update the script to not look at the logger file if this is a "Fill Missing Data Run" (Done)
+*** Sometimes a county pattern wont be found. If thats thw case, save the value as None and fix later (Done)
+*** Create a function to periodically use process_checkpoint() in scrape_data() to
+load the shelve file during recursive runs (DONE)
+*** Delete the shelve file at the end of a successful run (DONE)
+*** After loading the shelve file, check if all files have been scraped, if not run extract_re_data()
+*** Create a function to return the proper logger file in the read_logger(). If a recursive run is initiated the next
+day, the proper file wont be read
+*** Update read_logger to adjust the event logger pattern to find the list items, not string (DONE)
+event_log_pattern = re.compile(r"('Number of Runs': \d{1,4}), ('Run Type': .*), "
+                                       r"('Latest Available Data': .*), ('Run Time': .*), ('Run Date': .*), "
+                                       r"('Days Between Update': \d{1,3})")
+*** See if Twilio is still active, if not, switch to emailing results (DONE)
+________________________________________________________________________________________________________________
+
+_____________________________________________________________________________________________________________________
+
+The following functions need to be updated:
+[year for year in range(2019,date.now().year + 1)]
+
+1) __init__(self, session): (DONE)
+    Dependencies: state_dictionary(), create_event_log(), njrdata()
+    - __init__ will accept a request.Session variable which will be used throughout the script
+    - self.session = session
+    - Delete self.years and self.months
+    - self.current_month, self.current_year = self.latest_nj_data()
+    - self.run_number, self.last_ran_month, self.last_ran_year = self.latest_event_data()
+    - Initialize a sqlalcchemy db connection
+    - Delete the Scraper.state_dictionary(). Not being used anywhere
+    - Make the main_dictionary an instance variable and rename self.njrdata
+    - self.njrdata = {'City': [], 'County': [], 'Quarter': [], 'Month': [], 'Year': [], 'New Listings': [],
+                         'New Listing % Change (YoY)': [], 'Closed Sales': [], 'Closed Sale % Change (YoY)': [],
+                         'Days on Markets': [], 'Days on Market % Change (YoY)': [], 'Median Sales Prices': [],
+                         'Median Sales Price % Change (YoY)': [], 'Percent of Listing Price Received': [],
+                         'Percent of Listing Price Receive % Change (YoY)': [], 'Inventory of Homes for Sales': [],
+                         'Inventory of Homes for Sale % Change (YoY)': [], 'Months of Supply': [],
+                         'Months of Supplies % Change (YoY)': []
+    }
+
+2) extract_re_data(): (DONE)
+     Dependencies: parse_pdfname(), good_data()
+     - find the abspath of the pdfname and use that to open it
+    - remove possible_corrupted_list, main_dict, year_dict as function variables
+    - remove if pdfname in possible_corrupted_list:
+        - I dont care if a corrupt file is seen. Surround whole process in try-except block
+    - Just search lines[24:] if the town and county are in there. If not, raise Exception
+    - Remove check_county() and pdf_redundancy_check()
+    - Remove the county assertion
+    - Remove re.error, AssertionError, and Exception from the except blocks
+    - SORT THE DATA
+
+3) good_data(): (DONE)
+    - Remove assertion clause
+    - Only accpet target, city, county, month1, year1 as function variables
+    - Delete variable_list
+    - Replace category_list
+    - new function:
+    category_list = ['New Listings', 'Closed Sales', 'Days on Markets', 'Median Sales Prices', 'Percent of Listing Price Received',
+                     'Inventory of Homes for Sales', 'Months of Supply']
+    function_list = [Scraper.find_new_listings, Scraper.find_closed_sales, Scraper.find_dom, Scraper.find_median_sales,
+                     Scraper.find_percent_lpr, Scraper.find_inventory, Scraper.find_supply]
+
+
+    month = Scraper.find_month(pdftext)
+    self.njrdata['Month'].append(month)
+    self.njrdata['Quarter'].append(Scraper.quarter(month))
+    self.njrdata['Year'].append(Scraper.find_key_metrics(pdftext))
+    self.njrdata['City'].append(city)
+
+    for category, function in zip(category_list, function_list):
+        data = function(pdftext)
+        self.njrdata[category].append(data[0])
+        self.njrdata[f'{category} % Change (YoY)'].append(data[1])
+
+4) pdf_generator(): (DONE)
+    -new_function:
+
+    base_path = 'C:\\Users\\Omar\\Desktop\\Python Temp Folder'
+
+    if pdfname is None:
+        filenames = os.listdir(base_path)
+    elif type(pdfname) is list:
+        filenames = []
+        try:
+            for year, municipality in zip([y for y in range(2019,date.now().year + 1)], pdfname):
+                search_directory = f'C:\\Users\\Omar\\Desktop\\Python Temp Folder\\PDF Temp Files\\{year}\\{municipality}'
+                missing_files = os.listdir(search_directory)
+                filenames.extend(missing_files)
+        except FileNotFoundError:
+            # More than likely there are no files downloaded for that year
+            continue
+
+    elif pdfname.endswith('.pdf'):
+        filenames = os.listdir(base_path)
+        filenames = filenames[filenames.index(pdfname) + 1:]
+
+    for filename in filenames:
+        if filename.endswith('.pdf'):
+            yield filename
+        else:
+            continue
+
+5) parsed_pdfname(): (DONE)
+    - Do not return the town_directory
+    - Only output town, county, month, year
+
+6) fill_missing_data(): (DONE)
+    - Update the Scraper.pdf_generator and self.extract_re_data() functions
+
+7) data_na(): (DONE)
+    - Only accept the town, month, and year variables
+    - Replace category_list
+    - Delete everything else
+    - new function:
+
+    category_list = ['New Listings', 'Closed Sales', 'Days on Markets', 'Median Sales Prices', 'Percent of Listing Price Received',
+                     'Inventory of Homes for Sales', 'Months of Supply']
+
+    self.njrdata['Month'].append(month)
+    self.njrdata['Quarter'].append(Scraper.quarter(month))
+    self.njrdata['Year'].append(year)
+    self.njrdata['City'].append(town)
+    self.njrdata['County'].append('N.A')
+    self.njrdata['Month'].append(month)
+
+    for category in category_list:
+        self.njrdata[category].append(0)
+        self.njrdata[f'{category} % Change (YoY)'].append(0.0)
+
+8) connect2postgresql(): (DONE)
+    - Will use sqlalchemy to create a connection
+
+9) create_event_log(db_engine): (DONE)
+    - change function name to latest_event_data()
+    - ***** Save most recent event log dict to sql
+    - Accept the self.db_engine as a var since the classmethod cant directly access it
+    - latest_event = pd.read_sql_table('event_log', engine=db_engine).loc[-1]
+    - last_run_num = latest_event['Run Num']
+    - last_date = latest_event['Latest Available Data'].split(' ')
+    - Also have a try-except block that says if there's no data:
+        return 1, September, 2019
+
+    return last_run_num + 1, month2num(last_date[0]), int(last_date[1])
+
+*** I have to create properties that can access the class data
+
+10) njrdata(): (DONE)
+    Dependencies: area_results(), current_data_avail()
+    - Rename to latest_nj_data(self)
+    - Remove all the Selenium code and use the session variable
+    - new function:
+        url = 'https://www.njrealtor.com/login.php?rd=10&passedURL=/goto.php?10kresearch=1&skipToken=1'
+        response = session.get(url)
+
+        if response.status_code == 200:
+            page_source = response.text
+            soup = BeautifulSoup(page_results, 'html.parser')
+            self.area_results(soup)
+
+         return self.current_data_avail(soup)
+
+11) current_data_avail(): (DONE)
+
+    def month2num(month): (DONE)
+      # Switch the numbers and months around
+      month_dict = {
+          1: 'January', 2: 'February',
+          3: 'March', 4: 'April',
+          5: 'May', 6: 'June',
+          7: 'July', 8: 'August',
+          9: 'September', 10: 'October',
+          11: 'November', 12: 'December'
+        }
+
+        return month_dict[month]
+
+    current_results = soup.find('select', id="lmuTime").children
+    current_results = list(current_results)
+    target = current_results[2].get_text().split(' ')
+
+    return month2num(target[0]), target[1]
+
+12) njr10k(self, session): (DONE)
+    Dependencies: latest_file(), self.towns(), self.create_url_and_pdfname()
+    - Rename njr10k_downloads(self, **kwargs):
+    - new function:
+
+    def create_timeframe()
+
+        timeframe = {}
+        months = {'01': 'January', '02': 'February',
+                             '03': 'March', '04': 'April',
+                             '05': 'May', '06': 'June',
+                             '07': 'July', '08': 'August',
+                             '09': 'September', '10': 'October',
+                             '11': 'November', '12': 'December'
+                             }
+        for y in [year for year in range(self.latest_ran_year, self.current_year + 1)]:
+            if y == self.latest_ran_year:
+                # May have to play with the month numbers
+                month_start = list(months.keys()).index(self.latest_ran_month) + 1
+
+                timeframe[y] = list(months.keys())[month_start:]
+            else:
+                timeframe[y] = list(months.keys())
+
+        return timeframe
+
+    base_url = 'http://njar.stats.10kresearch.com/docs/lmu/'
+    params = {'src': 'Page'}
+
+    for key, value in self.create_timeframe().keys():
+        target_list = product(key, value, self.towns)
+        for _, data in zip(trange(len(target_list)), target_list):
+            pdf_url, new_filename = self.create_url_and_pdfname(base_url, data[0], data[1], data[2])
+            Scraper.download_pdf(session, pdf_url, pdf_name, params_dict)
+
+13) latest_file():
+    - Rename last_downloaded_pdf()
+    - Should be run in the main function
+    - Refactor how to find last downloaded file based on metadata of the file,
+    and how much data was supposed to be downloaded vs how much has been
+    - Use the read_logger function to assist this function
+    - Start the logger file with all the necessary run data to be parsed in the event of a script failure
+    - In the event of program failure, use logger and last downloaded pdf to create the modified timeframe in njr10k()
+    - Return the name of a pdf file or 'No pdfs available'
+    - FIND A WAY TO HANDLE IF ALL FILES HAVE BEEN DOWNLOADED, SCRAPED AND SAVED
+
+14) pandas2sql(): (DONE)
+    - This will now be an instance method rather than static
+    - Only arg will be **kwargs, table name will be a var that lives inside the function
+    - Turn self.njrdata into pandas df inside function
+    - Use Pandas and sqlalchemy to append df to currently existing table in PostgreSQL
+
+15) read_logger(): (DONE)
+    - Refactor to find the instance run data and last downloaded file
+
+16) logger_decorator(): (DONE)
+    - Only use on main(). Take logger off the other functions. Not necessary to use on multiple functions
+    - Change the f_handler and c_handler logger levels to where the stream logger only displays WARNING levels or above
+    and the file collects everything
+
+17) waiting() & text_message(): (DONE)
+    - Use outside of the main().
+    Use in conjunction with Airflow to modify the state of when the pipeline runs and give updates
+
+18) event_log_update(): (DONE)
+    - Use this to update the event log. Accept the event_log var from the main to update it
+    - Append the row to the table
+
+The following functions need to be deleted:
+
+1) check_county() (DONE)
+2) pdf_redundancy() (DONE)
+3) state_dictionary() (DONE)
+4) check_results() (DONE)
+5) update_njr10k() (DONE)
+6) Create_sql_table() (DONE)
+
+____________________________________________________________________________________________________________________________________
+"""
+        UPDATE - READ LOG FROM SQL DB
+
+        Classmethod which is run during class initialization update the class variable "event log" with
+        the class' run history and updates the class variable "no_of_runs". In the event there isn't a shelf
+        file available with event log history, a new event log dictionary is created.
+        :return: None
+        """
+        save_path = 'F:\\Python 2.0\\Projects\\Real Life Projects\\' \
+                    'NJR Scrapper\\Saved Data\\NJ Scrapper Data Dictionary_v2.dat'
+        if os.path.exists(save_path):
+            os.chdir('F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\Saved Data')
+            try:
+                with shelve.open('NJ Scrapper Data Dictionary_v2', writeback=True) as saved_data_file:
+                    if saved_data_file['Event Log']:
+                        cls.event_log = saved_data_file['Event Log']
+                        runs_list = [i for i in cls.event_log.keys()]
+                        Scraper.duplicate_eventlog_check()
+                        cls.no_of_runs = runs_list[-1] + 1
+
+                os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder')
+
+            except KeyError:
+                os.chdir('C:\\Users\\Omar\\Desktop\\Python Temp Folder')
+                key_names = ['Run Type', 'Latest Available Data', 'Run Time', 'Run Date', 'Days Between Update']
+                if cls.event_log == {}:
+                    cls.event_log.setdefault(cls.no_of_runs, {})
+
+                    for kn in key_names:
+                        cls.event_log[cls.no_of_runs].setdefault(kn, '')
+
+        """
+        UPDATE
+        EVENT LOG SHOULD BE A PANDAS DF AND THE NEW DATA SHOULD BE A PANDAS
+        SERIES WHICH IS APPENEDED TO THE BOTTOM OF THE FULL LOG
+
+        Instance method which updates the event log with runtime data of the most recent NJR10k download.
+        Stores the type of downlaod/update which was run, the length of the download runtime, current date and
+        length in time between the previous and current program runs
+        :param name: Name of the function ran (njr10k or update_njr10k)
+        :param run_time: time object which value is the download function's run time
+        :param logger: logger function which will return event log to ther logger file
+        :return: None
+        """
+        Scraper.event_log.setdefault(Scraper.no_of_runs, {'Run Type': '', 'Latest Available Data': '',
+                                                          'Run Time': '', 'Run Date': '', 'Days Between Update': ''})
+        Scraper.event_log[Scraper.no_of_runs]['Run Type'] = name
+        Scraper.event_log[Scraper.no_of_runs]['Latest Available Data'] = Scraper.current_data
+        Scraper.event_log[Scraper.no_of_runs]['Run Time'] = str(run_time)
+        Scraper.event_log[Scraper.no_of_runs]['Run Date'] = time.ctime()
+        Scraper.event_log[Scraper.no_of_runs]['Days Between Update'] = Scraper.daysuntilupdate()
+
+        logger.info(f'New Event Log Created:\n'
+                    f"\nRun Date: {Scraper.event_log[Scraper.no_of_runs]['Run Date']}"
+                    f"\nRun #: {Scraper.no_of_runs}"
+                    f"\nRun Type: {Scraper.event_log[Scraper.no_of_runs]['Run Type']}"
+                    f"\nLatest Available Data: {Scraper.event_log[Scraper.no_of_runs]['Latest Available Data']}"
+                    f"\nRun Time: {Scraper.event_log[Scraper.no_of_runs]['Run Time']}"
+                    f"\nDays Between Update: {Scraper.event_log[Scraper.no_of_runs]['Days Between Update']}")
+
+        message_body = '     NJ Scrapper     ' \
+                       f"\n" \
+                       f"\nEvent Log:" \
+                       f"\nRun Date: {Scraper.event_log[Scraper.no_of_runs]['Run Date']}" \
+                       f"\nRun #: {Scraper.no_of_runs}" \
+                       f"\nRun Type: {Scraper.event_log[Scraper.no_of_runs]['Run Type']}" \
+                       f"\nLatest Available Data: {Scraper.event_log[Scraper.no_of_runs]['Latest Available Data']}" \
+                       f"\nRun Time: {Scraper.event_log[Scraper.no_of_runs]['Run Time']}" \
+                       f"\nDays Between Update: {Scraper.event_log[Scraper.no_of_runs]['Days Between Update']}" \
+                       f"\nFilename: {excelfile}"
+
+        def waiting(sleep_time):
+    """
+
+    :param sleep_time:
+    :return:
+    """
+    sleep_time2 = str(sleep_time.days)
+    sleep_time3 = int(sleep_time2) * 86400  # 86,400 seconds in a day
+    if sleep_time3 > 86400:
+        message_body = f'There is currently no new data available. ' \
+                       f'NJRScrapper will check again in {sleep_time.days} days...'
+        Scraper.text_message(message_body)
+        time.sleep(sleep_time3)
+    else:
+        message_body = f"There is currently no new data available. Will check again tomorrow..."
+        Scraper.text_message(message_body)
+        time.sleep(86400)
+
+def fill_missing_data(self, target_directories: list, logger):
+"""
+UPDATE
+
+:param target_directories:
+:param logger:
+:return:
+"""
+
+name = "Fill Missing Data"
+start_time = datetime.datetime.now()
+
+for pdf in Scraper.pdf_generator(pdfname=target_directories):
+    self.extract_re_data(pdf, logger, update='Yes')
+
+end_time = datetime.datetime.now()
+run_time = end_time - start_time
+
+winsound.PlaySound('F:\\Python 2.0\\SoundFiles\\Victory.wav', 0)
+
+
 
 _________________________________________________________________________________________________________________________________________
 
 
 110) Clean all the strong and weak warning and format to PEP standards
-107) Refactor the code so I'm not reloading the old db using the shelve module
-    - Load the latest file from the Real Estate Data directory and turn the 'All Months ' and 'All Years' tabs into dictionaries
-    - Load new data in to the main_dictionary and full_year dict then concatenate them to the 'All Months ' and 'All Years' tabs
-    - Update the pandas2excel method to account for changes
 72) ***Look into aiohttp for async http requesting
 - asyncio is pretty difficult to use
 - there's something about the async setup that mixing up the split function for the cities with duplicate names
 - the download pdf function isnt downloading anything
 73) asynio Exceptions to my try-except blocks which use the module
-The current code causes errors because its walking through all files and folders and trying to extract whats not there
-https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directory
 79) Check back in a few days to determine campaign registration status on Twilio.com or email
 80) Create decorator functions for these tasks:
     ***Use functool.wrapper to keep the metadata
@@ -80,130 +392,8 @@ https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directo
     ***Change the logger level depending on the function running if possible
     ***May need to have "logger" as an arg to use in the function
     - CreateZip (properly place logger messages in function)
-94) May need to alter the logic for the end_of_year variable with an if statement:
-    if now = january, run zip
-93) Create a decorator called quarterly_statistics
-89) Make sure all the column datatypes are correct to calculate all stats
-90) Make sure CreateZip runs as intended and the os.walk goes through all directories then set logger messages
-    - Dont run until after Jan 24th of every year. Thats when the December data will be released
-91) Find a way to incorporate previous run date into run_main decorator
-    Make sure the run_main function runs as intended
-    It's not as intended right now, I need a way to check if the program has run already and if it has, check next month
-99) Check all the try-except branches in the code to make sure they're being logged properly
-    Use the help function on all of the Exception classes being used to make sure I'm capturing the most useful information
-100) Should I be creating new Exception classes?
-101) In case any errors are raised: I've changed the value calculation for percent_lpr_current
 45) If the program is killed due to an exception, I want to be able to rerun the program X number of times
-86) Create a function to upload the GIS Data and create cloropleth maps and timeseries maps:
-
-    *** Create a time-series graph on the map of New Jersey for these categories as well
-    - Download the CSV or GeoJSON (using Geopandas) from https://gisdata-njdep.opendata.arcgis.com/datasets/newjersey::municipal-boundaries-of-nj/explore?location=40.084926%2C-74.743150%2C8.00&showTable=true
-    - Make sure the GeoJSON index matches the df index (rename the 'MUN' column to 'City') and join/merge the dfs
-
-    def cloropleth_maps():
-        import geopandas
-        import plotly.express as px
-
-        new_jersey = geopandas.read_file(filename, index = 'MUN')
-        new_jersey.rename(columns = {'MUN': 'City'}, inplace = True)
-        new_jersey[[column for column in new_jersey.columns]].sort_values(by=['City'])
-        ***I have to sort the dfs by Qtr and year before plotting
-
-        quarters = ['Q1', 'Q2', 'Q3', 'Q4']
-        for sheet in list_of_excel_workbook_sheets:
-            df = pd.read_excel('NJ 10k Real Estate', sheet)
-            ***Create different dfs which are sorted dfs for Q1-Q4
-            df_list = [df[[ for q in quarters
-            fig = px.cloropleth()
-
-
-    1) Create a function which creates line graphs and histograms for all categories for YTD for all cities of interest (sub x-axis will be by year)
-        def target_areas_graphs(self):
-            ***DF of Cites which have Top 10 Highest Median Closed Sales from all counties and filter for Median Sales Price < $750,000 (Decide on price later)
-
-            by_qtr_stats = pd.read_excel('NJR Scrapper Data By Qtr Stats')
-            years = temp_df['Year'].unique().to_list()
-            temp_df = by_qtr_stats.copy()
-            temp1_df = temp_df[['Year' == years[-1]]]
-            counties  = temp_df['County'].unique().to_list()
-            top10list = []
-
-            for county in counties:
-                temp2_df = temp1_df[['County' == county]]
-                temp3_df = temp2_df.nlargest(10, 'Closed Sales(Median)')
-                temp4_df = temp3_df[['Sales Price(Median)' < 750000]]
-                top10list.append(temp4_df)
-
-            target_cities_df = pd.concat(top10list)
-
-    2) Create a function which creates histograms for all categories for YTD for all counties (sub x-axis will be by year)
-        - Filter the new df by county
-        def matplot_all_graphs(self):
-    3) Use Seaborn to create pairplots on a state level then county level
-        - Filter the new df by county and year
-        import Seaborn
 
 
 
 
-print(tabulate(main_dictionary['2022'], headers = 'keys', tablefmt = 'plain'))
-print()
-print(tabulate(main_dictionary['2023'], headers = 'keys', tablefmt = 'plain'))
-
-
-
-18-Dec-23 19:43:53 - extract_re_data - ERROR - An Unhandled Error Has Occurred:
-['Traceback (most recent call last):\n', '  File "F:\\Python 2.0\\pythonProject\\venv\\NJR Scrapper\\Lib\\site-packages\\pandas\\core\\indexes\\base.py", line 3653, in get_loc\n    return self._engine.get_loc(casted_key)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n', '  File "pandas\\_libs\\index.pyx", line 147, in pandas._libs.index.IndexEngine.get_loc\n', '  File "pandas\\_libs\\index.pyx", line 176, in pandas._libs.index.IndexEngine.get_loc\n', '  File "pandas\\_libs\\hashtable_class_helper.pxi", line 7080, in pandas._libs.hashtable.PyObjectHashTable.get_item\n', '  File "pandas\\_libs\\hashtable_class_helper.pxi", line 7088, in pandas._libs.hashtable.PyObjectHashTable.get_item\n', "KeyError: 'Greenwich Twp'\n", '\nThe above exception was the direct cause of the following exception:\n\n', 'Traceback (most recent call last):\n', '  File "F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\NJRScrapper.py", line 820, in extract_re_data\n    county = self.check_county(lines[5], real_town)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n', '  File "F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\NJRScrapper.py", line 238, in check_county\n    real_county = Scraper.find_county(town)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^\n', '  File "F:\\Python 2.0\\Projects\\Real Life Projects\\NJR Scrapper\\NJRScrapper.py", line 945, in find_county\n    return cls.state_dict.loc[city, \'County\']\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n', '  File "F:\\Python 2.0\\pythonProject\\venv\\NJR Scrapper\\Lib\\site-packages\\pandas\\core\\indexing.py", line 1096, in __getitem__\n    return self.obj._get_value(*key, takeable=self._takeable)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n', '  File "F:\\Python 2.0\\pythonProject\\venv\\NJR Scrapper\\Lib\\site-packages\\pandas\\core\\frame.py", line 3877, in _get_value\n    row = self.index.get_loc(index)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^\n', '  File "F:\\Python 2.0\\pythonProject\\venv\\NJR Scrapper\\Lib\\site-packages\\pandas\\core\\indexes\\base.py", line 3655, in get_loc\n    raise KeyError(key) from err\n', "KeyError: 'Greenwich Twp'\n"]
-Traceback (most recent call last):
-  File "F:\Python 2.0\pythonProject\venv\NJR Scrapper\Lib\site-packages\pandas\core\indexes\base.py", line 3653, in get_loc
-    return self._engine.get_loc(casted_key)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "pandas\_libs\index.pyx", line 147, in pandas._libs.index.IndexEngine.get_loc
-  File "pandas\_libs\index.pyx", line 176, in pandas._libs.index.IndexEngine.get_loc
-  File "pandas\_libs\hashtable_class_helper.pxi", line 7080, in pandas._libs.hashtable.PyObjectHashTable.get_item
-  File "pandas\_libs\hashtable_class_helper.pxi", line 7088, in pandas._libs.hashtable.PyObjectHashTable.get_item
-KeyError: 'Greenwich Twp'
-The above exception was the direct cause of the following exception:
-Traceback (most recent call last):
-  File "F:\Python 2.0\Projects\Real Life Projects\NJR Scrapper\NJRScrapper.py", line 820, in extract_re_data
-    county = self.check_county(lines[5], real_town)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "F:\Python 2.0\Projects\Real Life Projects\NJR Scrapper\NJRScrapper.py", line 238, in check_county
-    real_county = Scraper.find_county(town)
-                  ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "F:\Python 2.0\Projects\Real Life Projects\NJR Scrapper\NJRScrapper.py", line 945, in find_county
-    return cls.state_dict.loc[city, 'County']
-           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
-  File "F:\Python 2.0\pythonProject\venv\NJR Scrapper\Lib\site-packages\pandas\core\indexing.py", line 1096, in __getitem__
-    return self.obj._get_value(*key, takeable=self._takeable)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "F:\Python 2.0\pythonProject\venv\NJR Scrapper\Lib\site-packages\pandas\core\frame.py", line 3877, in _get_value
-    row = self.index.get_loc(index)
-          ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "F:\Python 2.0\pythonProject\venv\NJR Scrapper\Lib\site-packages\pandas\core\indexes\base.py", line 3655, in get_loc
-    raise KeyError(key) from err
-KeyError: 'Greenwich Twp'
-
-        else:
-            for n, i in enumerate(corrupt_list):
-                info = i.rstrip('.pdf').split(' ')
-                town = info[0:len(info) - 2]
-                if len(town) > 1:
-                    if 'County' in town:
-                        # This means the city name is a duplicate and needs to have the county distinguished
-                        # For example: ['Franklin', 'Twp', 'Gloucester', 'County']
-                        # --------> ['Franklin', 'Twp', '/', 'Gloucester', 'County']
-                        town.insert(town.index('County') - 1, '/')
-                        town = ' '.join(town)
-                    else:
-                        town = ' '.join(town)
-                else:
-                    town = info[0]
-
-                month = info[-2]
-                year = info[-1]
-
-                if year == '2019':
-                    # Skip all corrupted files from 2019. That data is not available
-                    possible_corrupted_files.append(i)
-                    continue
