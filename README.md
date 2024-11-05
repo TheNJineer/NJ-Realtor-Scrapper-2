@@ -21,16 +21,23 @@ The current system (or lack thereof) for real estate agents to analyze their loc
 
 <b>Data Sources:</b>
 - NJ Realtor Association
+- Wikipedia
+- USPS (Zipcode Lookup) / UnitedStatesZipCodes.org
 - US Cenus for the 2019-2022 Per Capita Income
 - US Cenus for the 2019-2022 Median Household Income
+- US Cenus for the 2019-2022 Median Age
+- US Cenus for the 2019-2022 Home Ownership Rates
+- US Cenus for the 2019-2022 Commuting Data
+- County Business Patterns (CBP) by Zipcode
 - FBI Uniform Crime Reporting Program (UCRP)
 - NJ Deptartment of Labor for 2019-2023 Population Estimates
+- NJ Deptartment of Labor for 2019-2023 General Tax Rates
+- NJ Deptartment of Labor for 2019-2023 Average Property Tax Bills
 - NJ Deptartment of Labor for 2019-2023 Unemployment Rates
 - U.S Environmental Protection Agency Air Quality Index (AQI)
 - School Digger Best High School Rankings (for NJ)
 
 <b>Designing the System:</b>
-
 The pipeline operates as follows:
 1. Requests will be used to send inidividual requests to receive files from the host server for each municipality for that month and year
 2. After all target pdfs are streamed, begin scrapping the data using PyPDF2 and Regex
@@ -39,3 +46,60 @@ The pipeline operates as follows:
 5. Initiate data cleaning and transformations
 6. Store DataFrame in PostgreSQL
 7. Schedule monthly data aggregation with Apache Airflow
+
+<b>Data Cleaning, Enrichment, Imputations and Transformations</b>
+- Used BeautifulSoup and Requests to scrape all municipality's latitudinal and longitudunal information to merge with real estate data
+- Used BeautifulSoup and Requests to scrape of NJs Census Designated Places (CDPs) and convert names to host cities
+- Transformed all of US Census Data from JSON to Pandas Dataframes
+- School names cleaned to match their host municipality. Municipality's School Rank was averaged if multiple school systems existed
+- Transformed FBI Crime Data from unconventional xlsx and pdf formats to Pandas Dataframes
+- Used the Census Bureau API to request CBP zipcode data. Transformed and filtered data to save NJ Zipcodes early. Use the full zipcode database to match NJ zipcodes with their municipality name
+- Air Quality Index Data was transformed and filtered NJ Counties only. Data was then converted from a daily to a yearly timeframe
+- After merging all dataframes, necessary transformations (added constants, log, exp and power) were applied to ensure data was as close to normally distributed as possible
+
+<b>Exploratory Data Analysis & Data Visualization</b>
+<div id="header" align="center">
+  <br>What is the Median Sales Price of the hottest/coldest cities?</br>
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Median%20Sales%20Prices%20by%20Year.jpeg" width="500"/>
+</div>
+<div id="header" align="center">
+  <br>What is the Average Median Household Income Estimates by County for 2022?</br>
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Avg%20Median%20Household%20Income%20Estimate%20by%20County%20in%202022.jpeg" width="500"/>
+</div>
+<div id="header" align="center">
+  <br>What is the Average Median Gross Rent by County for 2022?</br>
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Avg%20Estimated%20Median%20Gross%20Rent%20-%20Dollar%20by%20County.jpeg" width="500"/>
+</div>
+<div id="header" align="center">
+  <br>What is the best month to sell your home?</br>
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Closed%20Sales%20by%20Month%20(All%20Time).jpeg" width="1500"/>
+</div>
+<div id="header" align="center">
+  <br>Affordability Scatter Plots</br>
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Affordability%20Scatter%20Plots.jpeg" width="1500"/>
+</div>
+<div id="header" align="center">
+  <br>Choropleth Maps of New Jersey</br>
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Static%20Choropleth%20Map%20Matrix.jpeg" width="3000"/>
+</div>
+
+<b>Machine Learning</b>
+
+<div id="header" align="center">
+  <br>Supervised Regression R2 Prediction and Best Fit Scores</br>
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Estimator%20Scores.jpeg.jpeg" width="3000"/>
+</div>
+<div id="header" align="center">
+  <br>UMAP Dimension Reduction Results (Pre-Clustering)</br>
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Rotating%20Clusters%20UMAP_PreLabel.gif" width="3000"/>
+</div>
+<div id="header" align="center">
+  <br>UMAP Dimension Reduction Clustering Results</br>
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Rotating%20Clusters%20UMAP.gif" width="3000"/>
+</div>
+
+
+
+
+
+
