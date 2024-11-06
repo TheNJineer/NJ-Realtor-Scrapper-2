@@ -59,33 +59,70 @@ The pipeline operates as follows:
 
 <b>Exploratory Data Analysis & Data Visualization</b>
 <div id="header" align="center">
-  <br>What is the Median Sales Price of a NJ Home Since 2019?</br>
   <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Median%20Sales%20Prices%20by%20Year.jpeg" width="500"/>
+  <br>Figure 1: What is the Median Sales Price of a NJ Home Since 2019?</br>
+  <br></br>
+  The median sales price has increase by approximately 65% since 2019, with an average yearly increase of 13%
+  <br></br>
 </div>
+
 <div id="header" align="center">
-  <br>What is the Average Median Gross Rent by County for 2022?</br>
   <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Avg%20Estimated%20Median%20Gross%20Rent%20-%20Dollar%20by%20County.jpeg" width="500"/>
+  <br>Figure 2: What is the Average Median Gross Rent by County for 2022?</br>
+  <br></br>
+  The median gross rent is highest in northern New Jersey and decreases as one heads south. There's a positive linear correlation between both Latitude and Longitude and Gross Rent
+  <br></br>
 </div>
+
 <div id="header" align="center">
-  <br>What is the best month to sell your home?</br>
   <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Closed%20Sales%20by%20Month%20(All%20Time).jpeg" width="1500"/>
+  <br>Figure 3: What is the best month to sell your home?</br>
+  <br></br>
+  According to data, the best time to sell your home is either in August, July, or June. Each month has respectively accounted for approximately 10% of the states closed sales since NJ Realtor has recorded data. This also correlates to higher sales price during these months
+  <br></br>
 </div>
 
 <b>Machine Learning</b>
 
 <div id="header" align="center">
-  <br>Supervised Regression R2 Prediction and Best Fit Scores</br>
   <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Estimator%20Scores.jpeg.jpeg" width="3000"/>
-</div>
-<div id="header" align="center">
-  <br>UMAP Dimension Reduction Results (Pre-Clustering)</br>
-  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Rotating%20Clusters%20UMAP_PreLabel.gif" width="3000"/>
-</div>
-<div id="header" align="center">
-  <br>UMAP Dimension Reduction Clustering Results</br>
-  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Rotating%20Clusters%20UMAP.gif" width="3000"/>
+  <br>Figure 4: Supervised Regression R2 Prediction and Best Fit Scores</br>
+  <br></br>
+  Distance-based, Decision Tree and Ensemble estimators performed best in predicting the target (Populaiton) and understanding the relationship between it and the dependent variables.
+  They typically do better with higher dimension data. The linear estimators underperformed as expected but, I was able to use linear feature importance techniques to deduce which features were
+  led to the best estimator scores. The best hyperparameters were found using Sci-kit Learn's Grid Search Cross Validation method.
+  <br></br>
 </div>
 
+<div id="header" align="center">
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Rotating%20Clusters%20UMAP_PreLabel.gif" width="3000"/>
+  <br>Figure 5: UMAP Dimension Reduction Results (Pre-Clustering)</br>
+  <br></br>
+  After applying all imputations and transformations to make the data as normalized as possible, I used the UMAP dimension reduction technique to reduce the dimensions from 66 features down to
+  three (3). There are some clearly formed clusters after the transformation but, more needs to be done to quantify how many individual clusters there are.
+  <br></br>
+  
+</div>
+<div id="header" align="center">
+  <img src="https://github.com/TheNJineer/NJRealtor-Scrapper/blob/updated_main/Project%20Images/Rotating%20Clusters%20UMAP.gif" width="3000"/>
+  <br>Figure 6: UMAP Dimension Reduction Clustering Results</br>
+  <br></br>
+  Clustering algorithms like KMeans, DBSCAN and HDBSCAN were used to estimate the numeber of clusters each instance of data belonged to. Additionally, cluster evaluators such as 
+  the Silhouete Score and David Bouldin Score were used to estimate how well clusters formed and how different each cluster was to one another. The cluster evaluators determined that KMeans 
+  produced the best scored clusters. Result may vary through each use of UMAP with six (6) to eight (8) unique clusters being found (eight (8) clusters shown in this figure)
+  <br></br>
+</div>
+
+<b>Additional Actions Considered</b>
+- Re-run the algorithm using all of the monthly data
+- Generate normalized data on a monthly scale from the yearly data
+- Include all discrete data (Municipality Name, County, Quarter) through encoding techniques
+- Feature engineer a column which would classify a municipality being part of North, Central, or South Jersey
+- Try to enrich the data with more municipal level data
+- Perform EDA on the clusters discovered through unsupervised learning. This will help me understand their similaries and apply a classification label
+- Apply a classification algorithm to predicted the likelihood of an instance being labeled the correct municipality and cluster
+  
+<b>Summary</br>
 
 
 
